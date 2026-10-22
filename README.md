@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Shadow Palace 🌑
 
-## Getting Started
+A self-hosted, dark-mode manga / manhwa / light-novel reader. Installable as
+a PWA — own window on desktop, home-screen app on mobile.
 
-First, run the development server:
+## Sources
+
+All sources are pluggable adapters behind a single `SourceAdapter` interface:
+
+| Source     | Kind  | Notes                                      |
+| ---------- | ----- | ------------------------------------------ |
+| MangaDex   | manga | Primary. Official API.                     |
+| comix.to   | manga | Signed JSON API.                           |
+| MangaFire  | manga | SPA JSON API; pages need Referer (proxied).|
+| MangaDot   | manga | Cloudflare-safe JSON API.                  |
+| toonkotsu  | manga | Rankings + series API.                     |
+| NovelFull  | novel | Web novels — text reader (Shadow Slave, LOTM). |
+
+### Cross-source chapter merging
+
+MangaDex alone often has holes — dead scanlation groups drop middle chapters.
+When you open a title, Shadow Palace finds it on **every** other source and
+merges the chapter lists by chapter number, so a chapter "exists" if *any*
+source has it. Fallback-source chapters get a badge, and reading falls through
+to whichever source actually serves pages.
+
+### Image proxy
+
+Some CDNs reject hotlinks without a matching `Referer`, and `<img>` tags can't
+send headers. All page images route through `/api/img`, which fetches
+server-side with the adapter's required headers and caches the result.
+
+## Stack
+
+- **Next.js 16** (App Router, Turbopack) + **React 19**
+- **Tailwind CSS v4** — design tokens in `src/app/globals.css`
+- **Zustand + idb** — library/follow state in IndexedDB (local-first)
+- **TanStack Query** — caching for source fetches
+- **framer-motion** — reader transitions
+
+## Develop
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```bash
+npm run build      # production build (standalone output)
+npm run start
+npm run lint
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Every push to `master` runs CI (build) and publishes a Docker image to GHCR:
 
-## Learn More
+```
+ghcr.io/<owner>/shadow-palace:latest
+```
 
-To learn more about Next.js, take a look at the following resources:
+Pull that image on any host (VPS, Railway, Fly.io, Cloud Run) and it
+auto-updates on each push. Locally:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+docker build -t shadow-palace .
+docker run -p 3000:3000 shadow-palace
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project layout
 
-## Deploy on Vercel
+```
+src/
+  app/            Routes (home, search, title, read, library) + API
+  components/     UI (home, media, reader, title, ui)
+  lib/            library store, reader prefs, cache, merge, anilist
+  sources/        SourceAdapter interface + one file per source
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> Personal-use reader. Respect the terms of the sources you configure.

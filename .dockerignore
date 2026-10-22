@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+dev.log
+shot*.png
+*.local
+Dockerfile
+.dockerignore
+.github
+README.md
+AGENTS.md

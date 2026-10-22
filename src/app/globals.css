@@ -1,26 +1,128 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* ── Shadow Palace palette: deep void + violet flame ─────────────── */
+  --color-void: #07060b;
+  --color-abyss: #0b0913;
+  --color-palace: #120f20;
+  --color-hall: #1a1531;
+  --color-veil: #262045;
+  --color-mist: #8b84ab;
+  --color-moon: #ece9fa;
+  --color-flame: #a78bfa;
+  --color-flame-deep: #7c5cf5;
+  --color-ember: #f472b6;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-novel: var(--font-literata), Georgia, "Times New Roman", serif;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --animate-shimmer: shimmer 1.8s ease-in-out infinite;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-glow-pulse: glow-pulse 4s ease-in-out infinite;
+
+  @keyframes shimmer {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes glow-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 0.7;
+    }
   }
 }
 
+/* ── Base ──────────────────────────────────────────────────────────── */
+
+html {
+  background-color: var(--color-void);
+  color-scheme: dark;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-void);
+  color: var(--color-moon);
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-flame) 40%, transparent);
+  color: #fff;
+}
+
+/* Thin custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-veil);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-flame-deep);
+}
+
+/* ── Utilities ─────────────────────────────────────────────────────── */
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility safe-pb {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility safe-pt {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility overscroll-none {
+  overscroll-behavior: none;
+}
+
+/* Gradient text helper */
+@utility text-gradient {
+  background: linear-gradient(120deg, var(--color-flame) 0%, var(--color-ember) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Ambient radial glow used behind hero sections */
+@utility glow {
+  background: radial-gradient(
+    60% 55% at 50% 0%,
+    color-mix(in oklab, var(--color-flame-deep) 22%, transparent) 0%,
+    transparent 100%
+  );
 }
