@@ -17,6 +17,8 @@ export interface PageReaderProps {
   onProgress?: (page: number) => void;
   /** Fires when the reader tries to advance past the last page. */
   onReachEnd?: () => void;
+  /** Fires when a page image fails to load (for source fallback). */
+  onImageError?: (index: number) => void;
   /** Next chapter route, if any — shown on the end card. */
   nextHref?: string | null;
   nextLabel?: string;
@@ -33,6 +35,7 @@ export function PageReader({
   initialPage = 0,
   onProgress,
   onReachEnd,
+  onImageError,
   nextHref,
   nextLabel,
   titleHref,
@@ -147,6 +150,7 @@ export function PageReader({
             src={pages[index]}
             alt={`Page ${index + 1}`}
             draggable={false}
+            onError={() => onImageError?.(index)}
             className={cn(
               "no-cursor-drag",
               fitMode === "width"

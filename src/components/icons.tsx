@@ -49,6 +49,17 @@ export function LibraryIcon(props: IconProps) {
   );
 }
 
+export function ChartIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 20h16" />
+      <rect x="5" y="11" width="3.6" height="6" rx="1" />
+      <rect x="10.2" y="7" width="3.6" height="10" rx="1" />
+      <rect x="15.4" y="4" width="3.6" height="13" rx="1" />
+    </svg>
+  );
+}
+
 export function ArrowLeftIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

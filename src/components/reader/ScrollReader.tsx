@@ -19,6 +19,8 @@ export interface ScrollReaderProps {
   initialPct?: number;
   onProgress?: (pct: number) => void;
   onReachEnd?: () => void;
+  /** Fires when a page image fails to load (for source fallback). */
+  onImageError?: (index: number) => void;
   prevHref?: string | null;
   nextHref?: string | null;
   prevLabel?: string;
@@ -35,16 +37,19 @@ export function ScrollReader({
   initialPct = 0,
   onProgress,
   onReachEnd,
+  onImageError,
   prevHref,
   nextHref,
   prevLabel,
   nextLabel,
 }: ScrollReaderProps) {
   const chrome = useReaderChrome();
-  const { scrollToTop, scrollToBottom, restoreTo } = useScrollProgress({
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { scrollToTop, scrollToBottom, restoreTo, scrollByPages } = useScrollProgress({
     initialPct,
     onProgress,
     onReachEnd,
+    containerRef: scrollRef,
   });
 
   const [loaded, setLoaded] = useState(0);
@@ -79,24 +84,16 @@ export function ScrollReader({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
         e.preventDefault();
-        scrollBy(1);
+        scrollByPages(1);
       } else if (e.key === "ArrowUp" || e.key === "PageUp") {
         e.preventDefault();
-        scrollBy(-1);
-      } else if (e.key === "Home") window.scrollTo({ top: 0, behavior: "smooth" });
-      else if (e.key === "End")
-        window.scrollTo({
-          top: document.documentElement.scrollHeight,
-          behavior: "smooth",
-        });
+        scrollByPages(-1);
+      } else if (e.key === "Home") scrollToTop();
+      else if (e.key === "End") scrollToBottom();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  function scrollBy(dir: 1 | -1) {
-    window.scrollBy({ top: dir * window.innerHeight * 0.85, behavior: "smooth" });
-  }
+  }, [scrollByPages, scrollToTop, scrollToBottom]);
 
   // Tap image/background area toggles chrome; taps on buttons pass through.
   const onBodyClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -105,7 +102,11 @@ export function ScrollReader({
   };
 
   return (
-    <div className="overscroll-none" onClick={onBodyClick}>
+    <div
+      ref={scrollRef}
+      className="h-full overflow-y-auto overscroll-contain"
+      onClick={onBodyClick}
+    >
       {pages.map((url, i) => (
         // eslint-disable-next-line @next/next/no-img-element -- reader pages from arbitrary CDNs
         <img
@@ -116,6 +117,7 @@ export function ScrollReader({
           decoding="async"
           draggable={false}
           onLoad={() => setLoaded((n) => n + 1)}
+          onError={() => onImageError?.(i)}
           className="block w-full select-none"
           style={{ contentVisibility: i > 2 ? "auto" : "visible" }}
         />

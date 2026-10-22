@@ -119,6 +119,8 @@ interface LibraryState {
     },
   ) => Promise<void>;
   remove: (key: string) => Promise<void>;
+  /** Merge entries from a backup file (newer copy wins per title). */
+  importAll: (incoming: LibraryEntry[]) => Promise<number>;
 }
 
 async function persist(entry: LibraryEntry) {
@@ -251,6 +253,23 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     });
     const d = await db();
     await d.delete(STORE, key);
+  },
+
+  importAll: async (incoming) => {
+    const current = get().entries;
+    let merged = 0;
+    for (const raw of incoming) {
+      if (!raw?.key || !raw.source || !raw.mangaId) continue;
+      const existing = current[raw.key];
+      // Keep whichever copy is newer — a backup shouldn't clobber
+      // fresher progress already on this device.
+      if (existing && existing.updatedAt >= (raw.updatedAt ?? 0)) continue;
+      const entry: LibraryEntry = { ...raw, chapters: raw.chapters ?? {} };
+      set((s) => ({ entries: { ...s.entries, [entry.key]: entry } }));
+      await persist(entry);
+      merged++;
+    }
+    return merged;
   },
 }));
 

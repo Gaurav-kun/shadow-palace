@@ -3,7 +3,6 @@ import type { SourceAdapter, SourceChapter } from "@/sources/types";
 import { SourceError } from "@/sources/types";
 import { mergeChapters, titleScore, type MergedChapter } from "@/lib/merge";
 import { cached, TTL_CHAPTERS } from "@/lib/cache";
-
 /**
  * GET /api/aggregate?source=mangadex&id=<mangaId>
  *
@@ -34,6 +33,29 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 const MATCH_THRESHOLD = 0.5;
 
+/** Normalize an author name for comparison (case/punct/space-insensitive). */
+function normAuthor(a: string): string {
+  return a.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Do two titles plausibly refer to the SAME series? Titles alone are
+ * unreliable — different series share names (e.g. multiple "Nisekoi").
+ * So when both sides expose authors, require at least one author in
+ * common. If either side has no authors (unknown), we can't disprove a
+ * match, so fall back to the title score alone.
+ */
+function sameSeries(
+  titleScoreOk: boolean,
+  primaryAuthors: string[],
+  candidateAuthors: string[],
+): boolean {
+  if (!titleScoreOk) return false;
+  if (primaryAuthors.length === 0 || candidateAuthors.length === 0) return true;
+  const primary = new Set(primaryAuthors.map(normAuthor));
+  return candidateAuthors.some((a) => primary.has(normAuthor(a)));
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const source = searchParams.get("source");
@@ -44,9 +66,12 @@ export async function GET(request: Request) {
 
   let primary: SourceAdapter;
   let title: string;
+  let primaryAuthors: string[] = [];
   try {
     primary = getAdapter(source);
-    title = (await primary.getManga(id)).title;
+    const pm = await primary.getManga(id);
+    title = pm.title;
+    primaryAuthors = pm.authors ?? [];
   } catch (err) {
     const status = err instanceof SourceError ? err.status : 500;
     return Response.json(
@@ -75,6 +100,24 @@ export async function GET(request: Request) {
               .map((r) => ({ r, score: titleScore(title, r.title) }))
               .sort((a, b) => b.score - a.score)[0];
             if (!best || best.score < MATCH_THRESHOLD) throw new Error("no match");
+
+            // Title matches — but a different series can share a name
+            // (e.g. multiple "Nisekoi"). Verify it's the SAME series by
+            // comparing authors before we merge its chapters in.
+            const candManga = await withTimeout(
+              adapter.getManga(best.r.id),
+              8000,
+            ).catch(() => null);
+            const candAuthors = candManga?.authors ?? [];
+            if (
+              !sameSeries(
+                best.score >= MATCH_THRESHOLD,
+                primaryAuthors,
+                candAuthors,
+              )
+            ) {
+              throw new Error("different series (author mismatch)");
+            }
 
             const chapters = await withTimeout(adapter.getChapters(best.r.id), 10000);
             if (!chapters.length) throw new Error("no chapters");

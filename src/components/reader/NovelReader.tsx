@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useReaderPrefs } from "@/lib/prefs";
@@ -41,10 +41,12 @@ export function NovelReader({
   const chrome = useReaderChrome();
   const fontSize = useReaderPrefs((s) => s.novelFontSize);
   const lineHeight = useReaderPrefs((s) => s.novelLineHeight);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { scrollToTop, scrollToBottom, restoreTo } = useScrollProgress({
     initialPct,
     onProgress,
     onReachEnd,
+    containerRef: scrollRef,
   });
 
   // Restore position once mounted.
@@ -64,7 +66,11 @@ export function NovelReader({
   };
 
   return (
-    <div className="overscroll-none min-h-dvh" onClick={onBodyClick}>
+    <div
+      ref={scrollRef}
+      className="h-full overflow-y-auto overscroll-contain"
+      onClick={onBodyClick}
+    >
       <article
         className="font-novel mx-auto max-w-[44rem] px-6 pt-16 pb-40 text-moon/95"
         style={{ fontSize, lineHeight }}

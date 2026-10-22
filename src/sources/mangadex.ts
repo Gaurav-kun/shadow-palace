@@ -235,6 +235,10 @@ export const mangadex: SourceAdapter = {
   },
 
   async getPages(chapterId): Promise<SourcePage[]> {
+    // NOTE: MangaDex at-home nodes can have PARTIAL caches (some files
+    // 404) and the node is sticky per chapter, so rotating here doesn't
+    // help. Instead the READER falls back to another source that has the
+    // chapter (see the read route's source-fallback). Keep this simple.
     const res = await mdFetch<{
       baseUrl: string;
       chapter: { hash: string; data: string[] };

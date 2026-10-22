@@ -6,6 +6,8 @@ import { mangafire } from "./mangafire";
 import { mangadot } from "./mangadot";
 import { toonkotsu } from "./toonkotsu";
 import { novelfull } from "./novelfull";
+import { freewebnovel } from "./freewebnovel";
+import { royalroad } from "./royalroad";
 
 /**
  * Source registry — every adapter lives here.
@@ -21,6 +23,8 @@ const adapters: SourceAdapter[] = [
   mangadot,
   toonkotsu,
   novelfull,
+  freewebnovel,
+  royalroad,
 ];
 
 export const PRIMARY_SOURCE = "mangadex";

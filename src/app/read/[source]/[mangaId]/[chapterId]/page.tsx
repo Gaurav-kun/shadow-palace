@@ -50,19 +50,94 @@ export default function ReadPage({
 
   const isNovel = manga?.kind === "novel";
 
+  /* ── Cross-source fallback ────────────────────────────────────
+   * Some sources (MangaDex) serve chapters from at-home nodes with
+   * PARTIAL caches — some page files 404. The aggregate endpoint knows
+   * which OTHER sources carry the same chapter number, so on an image
+   * error we switch to the next source that has this chapter. This is
+   * what makes "every page shows" true even when the primary source
+   * has holes. */
+  const [srcIdx, setSrcIdx] = useState(0);
+  const [failedImages, setFailedImages] = useState<Set<number>>(() => new Set());
+
+  // Candidates: [0] = the source you opened, then every other source the
+  // aggregate found for this exact chapter number.
+  const candidates = useQuery({
+    queryKey: ["chapter-sources", source, mangaId, chapterId],
+    enabled: Boolean(chapter) && !isNovel,
+    staleTime: 30 * 60 * 1000,
+    queryFn: async (): Promise<{ source: string; chapterId: string }[]> => {
+      const res = await fetch(
+        `/api/aggregate?source=${encodeURIComponent(source)}&id=${encodeURIComponent(mangaId)}`,
+      );
+      if (!res.ok) return [];
+      const data = (await res.json()) as {
+        chapters: { number?: string; refs: { source: string; chapterId: string }[] }[];
+      };
+      const num = chapter?.number;
+      const match = data.chapters.find((c) => c.number === num && c.number !== undefined);
+      return match?.refs ?? [];
+    },
+  });
+
+  const activeSource = candidates.data?.[srcIdx]?.source ?? source;
+  const activeChapterId = candidates.data?.[srcIdx]?.chapterId ?? chapterId;
+
+  // Clear per-page failure marks whenever we move to a new source.
+  useEffect(() => {
+    setFailedImages(new Set());
+  }, [activeSource]);
+
   const pagesQ = useQuery({
-    queryKey: ["pages", source, chapterId, isNovel ? "text" : "images"],
+    queryKey: [
+      "pages",
+      activeSource,
+      activeChapterId,
+      isNovel ? "text" : "images",
+    ],
     enabled: Boolean(manga),
     staleTime: 30 * 60 * 1000,
     queryFn: async () => {
       const mode = isNovel ? "text" : "images";
       const res = await fetch(
-        `/api/pages/${encodeURIComponent(source)}/${encodeURIComponent(chapterId)}?mode=${mode}`,
+        `/api/pages/${encodeURIComponent(activeSource)}/${encodeURIComponent(activeChapterId)}?mode=${mode}`,
       );
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed to load pages");
       return res.json() as Promise<{ pages?: { url: string }[]; paragraphs?: string[] }>;
     },
   });
+
+  // Reset fallback state when the chapter changes.
+  useEffect(() => {
+    setSrcIdx(0);
+    setFailedImages(new Set());
+  }, [chapterId]);
+
+  // When an image 404s: if we have another source for this chapter, jump
+  // to it (once we've seen 2+ failures on the current source, treat the
+  // whole source as bad). Track per-page failures first so a single bad
+  // page doesn't trigger a full source switch unnecessarily.
+  const onImageError = useCallback(
+    (index: number) => {
+      setFailedImages((prev) => {
+        const next = new Set(prev);
+        next.add(index);
+        // If a meaningful chunk of pages failed on this source and there's
+        // an alternate, switch.
+        const total = pagesQ.data?.pages?.length ?? 0;
+        const threshold = Math.max(2, Math.floor(total * 0.15));
+        if (
+          next.size >= threshold &&
+          candidates.data &&
+          srcIdx < candidates.data.length - 1
+        ) {
+          setSrcIdx((i) => i + 1);
+        }
+        return next;
+      });
+    },
+    [pagesQ.data?.pages?.length, candidates.data, srcIdx],
+  );
 
   /* ── Library wiring ─────────────────────────────────────────── */
 
@@ -224,6 +299,7 @@ export default function ReadPage({
           initialPct={saved?.pct ?? 0}
           onProgress={onPctProgress}
           onReachEnd={onReachEnd}
+          onImageError={onImageError}
           prevHref={prev ? hrefFor(prev) : null}
           nextHref={next ? hrefFor(next) : null}
           prevLabel={chLabel(prev)}
@@ -238,6 +314,7 @@ export default function ReadPage({
         initialPage={saved?.page ?? 0}
         onProgress={(page) => onPageProgress(page, pages.length)}
         onReachEnd={onReachEnd}
+        onImageError={onImageError}
         nextHref={next ? hrefFor(next) : null}
         nextLabel={chLabel(next)}
         titleHref={titleHref}

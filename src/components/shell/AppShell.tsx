@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
+  ChartIcon,
   HomeIcon,
   LibraryIcon,
   PalaceMark,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/", label: "Home", Icon: HomeIcon },
   { href: "/search", label: "Search", Icon: SearchIcon },
+  { href: "/chart", label: "Chart", Icon: ChartIcon },
   { href: "/library", label: "Library", Icon: LibraryIcon },
 ] as const;
 
