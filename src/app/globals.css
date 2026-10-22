@@ -1,17 +1,19 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Shadow Palace palette: deep void + violet flame ─────────────── */
+  /* ── Shadow Palace palette: deep void + violet flame ───────────────
+     Surfaces carry a real violet tint (not near-identical blacks) so
+     layers read as distinct without needing an extension color-grade. */
   --color-void: #07060b;
-  --color-abyss: #0b0913;
-  --color-palace: #120f20;
-  --color-hall: #1a1531;
-  --color-veil: #262045;
-  --color-mist: #8b84ab;
-  --color-moon: #ece9fa;
-  --color-flame: #a78bfa;
-  --color-flame-deep: #7c5cf5;
-  --color-ember: #f472b6;
+  --color-abyss: #0d0b18;
+  --color-palace: #141026;
+  --color-hall: #1e1840;
+  --color-veil: #302a5c;
+  --color-mist: #9a92c4;
+  --color-moon: #f2efff;
+  --color-flame: #b39bff;
+  --color-flame-deep: #8b6bff;
+  --color-ember: #ff7ab8;
 
   --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
@@ -62,6 +64,12 @@ html {
 
 body {
   background-color: var(--color-void);
+  /* Ambient violet haze behind the hero — depth without the extension. */
+  background-image: radial-gradient(
+    1100px 520px at 50% -160px,
+    color-mix(in oklab, var(--color-flame-deep) 16%, transparent) 0%,
+    transparent 72%
+  );
   color: var(--color-moon);
   font-family: var(--font-body);
   -webkit-tap-highlight-color: transparent;

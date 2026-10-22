@@ -59,8 +59,11 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${spaceGrotesk.variable} ${inter.variable} ${literata.variable} h-full`}
+      /* Extensions (Darkreader) inject attributes onto <html>/<body>
+         before React hydrates — suppress those attribute mismatches. */
+      suppressHydrationWarning
     >
-      <body className="min-h-dvh bg-void text-moon antialiased">
+      <body className="min-h-dvh bg-void text-moon antialiased" suppressHydrationWarning>
         {/* Warm up MangaDex connections before data lands */}
         <link rel="preconnect" href="https://api.mangadex.org" />
         <link rel="preconnect" href="https://uploads.mangadex.org" />
