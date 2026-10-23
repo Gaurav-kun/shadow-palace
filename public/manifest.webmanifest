@@ -1,7 +1,7 @@
 {
   "name": "Shadow Palace",
   "short_name": "Palace",
-  "description": "A personal manga, manhwa and light-novel reader. Dark, fast, yours.",
+  "description": "A self-hosted reader for manga, manhwa and light novels.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#07060b",

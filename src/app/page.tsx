@@ -47,7 +47,7 @@ export default function HomePage() {
             Shadow <span className="text-gradient">Palace</span>
           </h2>
           <p className="mt-3 max-w-md text-sm text-mist">
-            Manga, manhwa and light novels — one dark sanctuary, all yours.
+            Your library of manga, manhwa and light novels, all in one place.
           </p>
           <Link
             href="/search"
