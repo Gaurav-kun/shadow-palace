@@ -49,3 +49,5 @@ shot*.png
 
 diag-*.cjs
 dev-*.log
+
+commitmsg.txt
