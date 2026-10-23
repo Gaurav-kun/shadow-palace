@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { getAdapter } from "@/sources/registry";
 import { SourceError } from "@/sources/types";
 import { cached, TTL_CHAPTERS } from "@/lib/cache";
@@ -19,6 +20,12 @@ export default async function TitlePage({
   params: Promise<{ source: string; id: string }>;
 }) {
   const { source, id } = await params;
+
+  // Title pages depend on per-request, per-source data (and an
+  // in-memory TTL cache that reads Date.now()). With cacheComponents,
+  // any synchronous time access during prerender is a validation
+  // error — connection() opts the whole render into request time.
+  await connection();
 
   let adapter;
   try {
