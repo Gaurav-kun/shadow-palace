@@ -141,6 +141,36 @@ src/
   sources/        SourceAdapter interface + one file per source
 ```
 
+## APIs and services
+
+Shadow Palace is a client for third-party services. It hosts no content
+of its own.
+
+| Service | Used for | Type |
+| --- | --- | --- |
+| [MangaDex](https://mangadex.org) | Catalog, search, browse, chapters, pages | Official public API |
+| [AniList](https://anilist.co) | Scores, popularity, characters, anime adaptations | Public GraphQL API |
+| [Comick](https://comick.io) | Community ratings, score histograms | Public endpoints |
+| comix.to, MangaFire, MangaDot, Toonkotsu | Chapters and pages | Unofficial, read via adapters |
+| NovelFull, FreeWebNovel, RoyalRoad | Novel chapters and text | Unofficial, read via adapters |
+
+Unofficial sources are accessed through their public web interfaces
+without authentication. They can change or break at any time; adapters
+are maintained on a best-effort basis.
+
+## Credits
+
+- [Next.js](https://nextjs.org), [React](https://react.dev), and
+  [Tailwind CSS](https://tailwindcss.com) for the platform
+- [TanStack Query](https://tanstack.com/query) for client caching
+- [Zustand](https://zustand.docs.pmnd.rs) with
+  [idb](https://github.com/jakearchibald/idb) for the local library
+- [cheerio](https://cheerio.js.org) for HTML parsing in source adapters
+- [framer-motion](https://www.framer.com/motion/) for transitions
+- Cover art, chapter content, and metadata belong to their respective
+  authors, scanlation groups, and platforms. This project stores none of
+  it permanently.
+
 ## Notes
 
 This is a personal-use reader. Respect the terms of service of the
