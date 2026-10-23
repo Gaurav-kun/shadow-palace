@@ -42,6 +42,8 @@ export interface LibraryEntry {
   /** Newest chapter number we've seen from the source. */
   latestChapterNumber?: string;
   latestChapterId?: string;
+  /** Publish time (epoch ms) of that newest chapter, when known. */
+  latestChapterAt?: number;
   /** Chapters newer than what the user last read. */
   newChapterCount?: number;
   /** Estimated next-chapter time (epoch ms), from release cadence. */
@@ -113,6 +115,7 @@ interface LibraryState {
     info: {
       latestChapterNumber?: string;
       latestChapterId?: string;
+      latestChapterAt?: number;
       newChapterCount?: number;
       nextEstimateAt?: number;
       updateIntervalDays?: number;

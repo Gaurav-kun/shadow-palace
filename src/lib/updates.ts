@@ -59,10 +59,11 @@ export function useFollowUpdates() {
     void hydrate();
   }, [hydrate]);
 
-  // Memoized so the effect below doesn't re-fire on every unrelated
-  // store write (progress saves, ensures, …).
+  // Followed titles AND anything you've actually read — both deserve
+  // update badges. Memoized so the effect below only re-fires on real
+  // store changes (progress saves mustn't retrigger it every write).
   const followed: LibraryEntry[] = useMemo(
-    () => Object.values(entries).filter((e) => e.followed),
+    () => Object.values(entries).filter((e) => e.followed || e.lastChapterId),
     [entries],
   );
 
@@ -124,15 +125,22 @@ export function useFollowUpdates() {
       // turns every write into an infinite render→write→render loop.
       const nextAtN = nextAt ?? undefined;
 
+      // Publish time of the newest chapter (for the Updates feed), same
+      // normalization discipline: NaN/unknown → undefined.
+      const atMs = Date.parse(latest.publishedAt ?? "");
+      const latestAtN = Number.isNaN(atMs) ? undefined : atMs;
+
       // Only write when something changed (avoids render loops).
       if (
         entry.latestChapterNumber !== latest.number ||
         entry.newChapterCount !== newCount ||
-        entry.nextEstimateAt !== nextAtN
+        entry.nextEstimateAt !== nextAtN ||
+        entry.latestChapterAt !== latestAtN
       ) {
         void setUpdateInfo(entry.key, {
           latestChapterNumber: latest.number,
           latestChapterId: latest.id,
+          latestChapterAt: latestAtN,
           newChapterCount: newCount,
           nextEstimateAt: nextAtN,
           updateIntervalDays: intervalMs ? intervalMs / 86_400_000 : undefined,

@@ -276,3 +276,137 @@ export async function getAiringInfo(title: string): Promise<AiringInfo | null> {
 
   return { mangaId: media.id, mangaTitle: pickTitle(media.title), anime };
 }
+
+/* ── Series details: scores, bio, character roster ───────────────── */
+
+export interface SeriesCharacter {
+  id: number;
+  name: string;
+  image?: string;
+  /** MAIN | SIDE | BACKGROUND */
+  role: string;
+  description?: string;
+}
+
+export interface SeriesInfo {
+  mediaId: number;
+  /** Matched title (AniList's pick — could differ slightly from ours). */
+  title: string;
+  siteUrl?: string;
+  /** 0–100 scale; divide by 10 for ★ display. */
+  averageScore?: number;
+  popularity?: number;
+  favourites?: number;
+  genres: string[];
+  description?: string;
+  status?: string;
+  chapters?: number;
+  volumes?: number;
+  startDateYear?: number;
+  characters: SeriesCharacter[];
+}
+
+const SERIES_QUERY = /* GraphQL */ `
+  query ($search: String) {
+    Media(search: $search, type: MANGA) {
+      id
+      siteUrl
+      title { romaji english native }
+      averageScore
+      popularity
+      favourites
+      genres
+      description(asHtml: false)
+      status
+      chapters
+      volumes
+      startDate { year }
+      characters(perPage: 24, sort: [ROLE, RELEVANCE, ID]) {
+        edges {
+          role
+          node {
+            id
+            name { full native }
+            image { large medium }
+            description(asHtml: false)
+          }
+        }
+      }
+    }
+  }
+`;
+
+interface GqlSeriesMedia {
+  id: number;
+  siteUrl?: string | null;
+  title: { romaji?: string; english?: string; native?: string };
+  averageScore?: number | null;
+  popularity?: number | null;
+  favourites?: number | null;
+  genres?: string[] | null;
+  description?: string | null;
+  status?: string | null;
+  chapters?: number | null;
+  volumes?: number | null;
+  startDate?: { year?: number | null } | null;
+  characters?: {
+    edges?: Array<{
+      role?: string | null;
+      node: {
+        id: number;
+        name: { full?: string | null; native?: string | null };
+        image?: { large?: string | null; medium?: string | null } | null;
+        description?: string | null;
+      };
+    }> | null;
+  } | null;
+}
+
+/**
+ * Series details for a title page: AniList score/popularity/bio plus a
+ * 24-character roster. Self-contained fetch with a hard timeout so a slow
+ * AniList can never stall SSR — failures return null and the title page
+ * simply renders without enrichment.
+ */
+export async function getSeriesInfo(title: string): Promise<SeriesInfo | null> {
+  try {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ query: SERIES_QUERY, variables: { search: title } }),
+      next: { revalidate: 21600 },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      data?: { Media?: GqlSeriesMedia | null };
+      errors?: { message: string }[];
+    };
+    const m = json.data?.Media;
+    if (!m || json.errors?.length) return null;
+
+    return {
+      mediaId: m.id,
+      title: pickTitle(m.title),
+      siteUrl: m.siteUrl ?? undefined,
+      averageScore: m.averageScore ?? undefined,
+      popularity: m.popularity ?? undefined,
+      favourites: m.favourites ?? undefined,
+      genres: m.genres ?? [],
+      description: m.description ?? undefined,
+      status: m.status ?? undefined,
+      chapters: m.chapters ?? undefined,
+      volumes: m.volumes ?? undefined,
+      startDateYear: m.startDate?.year ?? undefined,
+      characters: (m.characters?.edges ?? []).map((e) => ({
+        id: e.node.id,
+        name: e.node.name.full ?? e.node.name.native ?? "Unknown",
+        image: e.node.image?.large ?? e.node.image?.medium ?? undefined,
+        role: e.role ?? "SIDE",
+        description: e.node.description ?? undefined,
+      })),
+    };
+  } catch {
+    return null;
+  }
+}

@@ -1,5 +1,8 @@
 import "server-only";
 import type {
+  BrowsePage,
+  BrowseQuery,
+  BrowseTag,
   SourceAdapter,
   SourceChapter,
   SourceManga,
@@ -153,6 +156,61 @@ export const mangadex: SourceAdapter = {
       id: m.id,
       title: mangaTitle(m.attributes),
       coverImage: coverUrl(m.id, m.relationships),
+    }));
+  },
+
+  /* ── Browse (Tachiyomi-style explore: sort + tags + filters + paging) ── */
+
+  async browse(query: BrowseQuery): Promise<BrowsePage> {
+    const params = new URLSearchParams({
+      limit: String(Math.min(Math.max(query.limit, 1), 48)),
+      offset: String(Math.max(query.offset, 0)),
+    });
+    const sortKey =
+      query.sort === "popular"
+        ? "followedCount"
+        : query.sort === "rated"
+          ? "rating"
+          : query.sort === "newest"
+            ? "createdAt"
+            : "latestUploadedChapter";
+    params.append(`order[${sortKey}]`, "desc");
+    params.append("includes[]", "cover_art");
+    for (const r of CONTENT_RATING) params.append("contentRating[]", r);
+    // Only surface titles actually readable in English.
+    params.append("availableTranslatedLanguage[]", "en");
+
+    if (query.q?.trim()) params.set("title", query.q.trim());
+    if (query.tags?.length) {
+      for (const t of query.tags.slice(0, 10)) params.append("includedTags[]", t);
+      params.append("includedTagsMode", "AND");
+    }
+    if (query.demographic) params.append("publicationDemographic[]", query.demographic);
+    if (query.language) params.append("originalLanguage[]", query.language);
+    if (query.status) params.append("status[]", query.status);
+
+    const res = await mdFetch<{ data: MdObject<MdMangaAttrs>[]; total?: number }>(
+      `/manga?${params}`,
+      META_REVALIDATE,
+    );
+    return {
+      total: res.total ?? res.data.length,
+      results: res.data.map((m) => ({
+        id: m.id,
+        title: mangaTitle(m.attributes),
+        coverImage: coverUrl(m.id, m.relationships),
+      })),
+    };
+  },
+
+  async browseTags(): Promise<BrowseTag[]> {
+    const res = await mdFetch<{
+      data: MdObject<{ name: Record<string, string>; group: string }>[];
+    }>(`/manga/tag`, 24 * 60 * 60);
+    return res.data.map((t) => ({
+      id: t.id,
+      name: pickLocalized(t.attributes.name),
+      group: t.attributes.group,
     }));
   },
 

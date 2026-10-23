@@ -2,20 +2,33 @@ import Link from "next/link";
 import { ContinueReading } from "@/components/home/ContinueReading";
 import { FollowingRow } from "@/components/home/FollowingRow";
 import { MangaShelf } from "@/components/home/MangaShelf";
+import { UpdatesSection } from "@/components/home/UpdatesSection";
 
 function SectionHeading({
   title,
   note,
+  href,
+  hrefLabel = "See all →",
 }: {
   title: string;
   note?: string;
+  href?: string;
+  hrefLabel?: string;
 }) {
   return (
     <div className="mb-3 flex items-baseline gap-3">
       <h2 className="font-display text-lg font-semibold tracking-wide">
         {title}
       </h2>
-      {note && <span className="text-xs text-mist">{note}</span>}
+      {note && <span className="flex-1 text-xs text-mist">{note}</span>}
+      {href && (
+        <Link
+          href={href}
+          className="shrink-0 text-xs text-mist transition-colors hover:text-flame"
+        >
+          {hrefLabel}
+        </Link>
+      )}
     </div>
   );
 }
@@ -55,6 +68,17 @@ export default function HomePage() {
           <FollowingRow />
         </section>
 
+        {/* Updates — newest chapters across everything you read/follow */}
+        <section>
+          <SectionHeading
+            title="Updates"
+            note="latest chapters from your library"
+            href="/library"
+            hrefLabel="Library →"
+          />
+          <UpdatesSection />
+        </section>
+
         {/* Continue reading — local library */}
         <section>
           <SectionHeading
@@ -66,7 +90,7 @@ export default function HomePage() {
 
         {/* Browse shelves (client-side, instant) */}
         <section>
-          <SectionHeading title="Latest Updates" note="fresh chapters" />
+          <SectionHeading title="Latest Updates" note="fresh chapters" href="/browse" />
           <MangaShelf type="latest" />
         </section>
       </div>

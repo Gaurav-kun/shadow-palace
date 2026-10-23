@@ -73,6 +73,42 @@ export interface SourceAdapter {
   getPages(chapterId: string): Promise<SourcePage[]>;
   /** Ordered text blocks for novel chapters (novel sources only). */
   getTextPages?(chapterId: string): Promise<string[]>;
+
+  /** Discovery: filtered, sorted, paged catalog (browse page). */
+  browse?(query: BrowseQuery): Promise<BrowsePage>;
+  /** Discovery: filter tags/categories for the browse page. */
+  browseTags?(): Promise<BrowseTag[]>;
+}
+
+/** Catalog discovery query for the browse page. */
+export interface BrowseQuery {
+  /** Sort order; default "latest" (latest uploaded chapter). */
+  sort?: "latest" | "popular" | "rated" | "newest";
+  /** Tag ids to match (AND). */
+  tags?: string[];
+  /** Publication demographic (shounen | shoujo | seinen | josei). */
+  demographic?: string;
+  /** Original language (ja | ko | zh …) — manga / manhwa / manhua. */
+  language?: string;
+  /** Serialization status (ongoing | completed | hiatus | cancelled). */
+  status?: string;
+  /** Partial title search. */
+  q?: string;
+  limit: number;
+  offset: number;
+}
+
+export interface BrowsePage {
+  results: SourceSearchResult[];
+  /** Total matches across every page. */
+  total: number;
+}
+
+export interface BrowseTag {
+  id: string;
+  name: string;
+  /** genre | theme | demographic | format */
+  group: string;
 }
 
 /** Thrown by adapters so the API layer can return clean errors. */

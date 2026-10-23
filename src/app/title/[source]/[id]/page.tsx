@@ -3,10 +3,13 @@ import { notFound } from "next/navigation";
 import { getAdapter } from "@/sources/registry";
 import { SourceError } from "@/sources/types";
 import { cached, TTL_CHAPTERS } from "@/lib/cache";
+import { getSeriesInfo, type SeriesInfo } from "@/lib/anilist";
+import { getComickStats, type ComickStats } from "@/lib/comick";
 import { CoverImage } from "@/components/media/CoverImage";
 import { TitleActions } from "@/components/title/TitleActions";
 import { TitleChapters } from "@/components/title/TitleChapters";
 import { AnimeAdaptationPanel } from "@/components/title/AnimeAdaptation";
+import { SeriesDetails } from "@/components/title/SeriesDetails";
 import { ArrowLeftIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +61,29 @@ export default async function TitlePage({
       </div>
     );
   }
+
+  // AniList + Comick enrichment — scores, bio fallback, character
+  // roster, community rating histogram. Both hard time-boxed and run in
+  // parallel so a slow third-party can never stall the title page; any
+  // doubt renders the plain page.
+  let series: SeriesInfo | null = null;
+  let comick: ComickStats | null = null;
+  try {
+    [series, comick] = await Promise.all([
+      Promise.race([
+        getSeriesInfo(manga.title),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+      ]),
+      Promise.race([
+        getComickStats(manga.title),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]),
+    ]);
+  } catch {
+    series = null;
+    comick = null;
+  }
+  const description = manga.description || series?.description;
 
   const statusStyle: Record<string, string> = {
     ongoing: "text-flame border-flame/40 bg-flame/10",
@@ -155,7 +181,7 @@ export default async function TitlePage({
         </div>
 
         {/* Description */}
-        {manga.description && (
+        {description && (
           <details className="group mt-7 max-w-3xl">
             <summary className="cursor-pointer list-none text-sm font-semibold text-moon/90 select-none">
               Synopsis
@@ -167,10 +193,13 @@ export default async function TitlePage({
               </span>
             </summary>
             <p className="mt-2 text-sm leading-relaxed whitespace-pre-line text-mist">
-              {manga.description}
+              {description}
             </p>
           </details>
         )}
+
+        {/* Series details — AniList scores + character popup */}
+        <SeriesDetails series={series} comick={comick} />
 
         {/* Anime adaptation */}
         <section className="mt-8 max-w-3xl">
