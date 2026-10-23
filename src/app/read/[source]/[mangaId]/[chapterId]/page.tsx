@@ -249,6 +249,16 @@ export default function ReadPage({
   const pages = pagesQ.data?.pages?.map((p) => p.url) ?? [];
   const paragraphs = pagesQ.data?.paragraphs ?? [];
 
+  // Stable identity for PageReader: an inline arrow here would be a new
+  // function on every render, re-firing its progress effect each time —
+  // progress write → store update → re-render → new arrow → progress
+  // write… an endless background cycle that pegs the tab. With a stable
+  // callback the effect only runs when the page actually changes.
+  const onPageReaderProgress = useCallback(
+    (page: number) => onPageProgress(page, pages.length),
+    [onPageProgress, pages.length],
+  );
+
   // Overall chapter progress for the chrome's top bar.
   const chromeProgress = saved
     ? mode === "pages" && saved.page !== undefined
@@ -341,7 +351,7 @@ export default function ReadPage({
       <PageReader
         pages={pages}
         initialPage={saved?.page ?? 0}
-        onProgress={(page) => onPageProgress(page, pages.length)}
+        onProgress={onPageReaderProgress}
         onReachEnd={onReachEnd}
         onImageError={onImageError}
         nextHref={next ? hrefFor(next) : null}

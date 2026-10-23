@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLibrary, type LibraryEntry } from "@/lib/library";
 import type { SourceChapter } from "@/sources/types";
@@ -59,8 +59,11 @@ export function useFollowUpdates() {
     void hydrate();
   }, [hydrate]);
 
-  const followed: LibraryEntry[] = Object.values(entries).filter(
-    (e) => e.followed,
+  // Memoized so the effect below doesn't re-fire on every unrelated
+  // store write (progress saves, ensures, …).
+  const followed: LibraryEntry[] = useMemo(
+    () => Object.values(entries).filter((e) => e.followed),
+    [entries],
   );
 
   // Subscribe to each followed title's chapter feed (deduped by key).
@@ -116,18 +119,22 @@ export function useFollowUpdates() {
           : sorted.filter((c) => chapterNum(c.number) > lastRead).length;
 
       const { intervalMs, nextAt } = estimateCadence(sorted);
+      // Normalize: stored values are `undefined`, derivation yields `null`
+      // — comparing them raw (`undefined !== null`) never settles and
+      // turns every write into an infinite render→write→render loop.
+      const nextAtN = nextAt ?? undefined;
 
       // Only write when something changed (avoids render loops).
       if (
         entry.latestChapterNumber !== latest.number ||
         entry.newChapterCount !== newCount ||
-        entry.nextEstimateAt !== nextAt
+        entry.nextEstimateAt !== nextAtN
       ) {
         void setUpdateInfo(entry.key, {
           latestChapterNumber: latest.number,
           latestChapterId: latest.id,
           newChapterCount: newCount,
-          nextEstimateAt: nextAt ?? undefined,
+          nextEstimateAt: nextAtN,
           updateIntervalDays: intervalMs ? intervalMs / 86_400_000 : undefined,
         });
       }
