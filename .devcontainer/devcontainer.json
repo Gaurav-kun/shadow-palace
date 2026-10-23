@@ -1,0 +1,13 @@
+{
+  "name": "Shadow Palace",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Shadow Palace",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "postCreateCommand": "npm install",
+  "postStartCommand": "npm run dev > /tmp/shadow-palace-dev.log 2>&1"
+}

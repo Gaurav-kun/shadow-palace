@@ -1,26 +1,61 @@
 # Shadow Palace
 
-A self-hosted reader for manga, manhwa, and light novels. It runs as a
-single Node process, stores your library in the browser, and installs as
-a PWA — a separate window on desktop, a home-screen app on mobile.
+Shadow Palace is a self-hosted reader for manga, manhwa, and light
+novels. It runs as a single Node process, stores your library in the
+browser, and installs as a PWA — a separate window on desktop, a
+home-screen app on mobile. The interface is dark by design.
 
-The interface is dark-only by design.
+## Running it
+
+There are two ways to run Shadow Palace. Neither requires money.
+
+### In the browser, nothing to install
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Gaurav-kun/shadow-palace)
+
+Click the button above. GitHub builds the project in a cloud container
+(a few minutes the first time) and starts it. When the bottom bar shows
+a forwarded port **3000**, click **Open in Browser**. That is the whole
+procedure.
+
+Codespaces sleeps after inactivity and wakes when the tab is reopened.
+A free GitHub account includes enough hours for occasional use. The
+repository must be public, or you must be a collaborator.
+
+### On your own computer
+
+1. Install [Node.js](https://nodejs.org) (version 20.9 or newer).
+2. On this page, click **Code → Download ZIP** and extract the file.
+3. Open a terminal in the extracted folder and run:
+
+   ```bash
+   npm install
+   npm run dev
+   ```
+
+4. Open <http://localhost:3000>.
+
+| Problem | Solution |
+| --- | --- |
+| `port 3000 is in use` | Run `npm run dev -- -p 3001` and open port 3001 instead |
+| Page reloads forever in development | Run `npm run dev:reset` |
+| First load is slow | Expected; the dev server compiles on first request, later loads are fast |
 
 ## Sources
 
 Sources are pluggable adapters behind one interface (`SourceAdapter` in
 `src/sources/`). Eight are implemented and working:
 
-| Source       | Type | Notes                                        |
-| ------------ | ---- | -------------------------------------------- |
-| MangaDex     | manga | Primary source. Official API.               |
-| comix.to     | manga | Signed JSON API.                            |
-| MangaFire    | manga | SPA JSON API; pages need Referer (proxied). |
-| MangaDot     | manga | Cloudflare-safe JSON API.                   |
-| Toonkotsu    | manga | Rankings + series API.                      |
-| NovelFull    | novel | Web novels, text reader.                    |
-| FreeWebNovel | novel | Web novels, text reader.                    |
-| RoyalRoad    | novel | Fiction, text reader.                       |
+| Source | Type | Notes |
+| --- | --- | --- |
+| MangaDex | manga | Primary source. Official API. |
+| comix.to | manga | Signed JSON API. |
+| MangaFire | manga | SPA JSON API; pages need Referer (proxied). |
+| MangaDot | manga | Cloudflare-safe JSON API. |
+| Toonkotsu | manga | Rankings + series API. |
+| NovelFull | novel | Web novels, text reader. |
+| FreeWebNovel | novel | Web novels, text reader. |
+| RoyalRoad | novel | Fiction, text reader. |
 
 Search, browse, and home shelves query MangaDex by default; every title
 page works with any source.
@@ -37,16 +72,16 @@ URL, so any view can be bookmarked or shared.
 A single source often has holes in a chapter list — dead scanlation
 groups drop middle chapters. When you open a title, Shadow Palace finds
 the same series on every other source and merges the chapter lists by
-chapter number. A chapter exists if *any* source has it. Fallback-source
+chapter number. A chapter exists if any source has it. Fallback-source
 chapters get a badge, and reading falls through to whichever source
 actually serves the pages.
 
 ### Image proxy
 
-Some CDNs reject hotlinks without a matching `Referer`, and `<img>` tags
-cannot send headers. All page images route through `/api/img`, which
-fetches server-side with the adapter's required headers and caches the
-result.
+Some CDNs reject hotlinks without a matching `Referer`, and `<img>`
+tags cannot send headers. All page images route through `/api/img`,
+which fetches server-side with the adapter's required headers and
+caches the result.
 
 ### Series details
 
@@ -66,11 +101,6 @@ blocks the page.
   chapter list first
 
 ## Develop
-
-```bash
-npm install
-npm run dev        # http://localhost:3000
-```
 
 ```bash
 npm run build      # production build (standalone output)
