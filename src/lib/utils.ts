@@ -6,6 +6,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Next.js route params arrive with special characters STILL ENCODED —
+ * encoded slashes stay `%2F` (vercel/next.js#48058). Adapters need the
+ * real value, so decode exactly once, defensively: anything without a
+ * `%` passes through untouched, and malformed sequences fall back to
+ * the raw string instead of throwing.
+ */
+export function decodeParam(s: string): string {
+  if (!s.includes("%")) return s;
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 /** Format a timestamp as a short relative time ("3h ago", "2d ago"). */
 export function timeAgo(iso: string | number | undefined): string {
   if (!iso) return "";

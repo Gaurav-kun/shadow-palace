@@ -1,5 +1,6 @@
 import { getAdapter } from "@/sources/registry";
 import { SourceError, type SourcePage } from "@/sources/types";
+import { decodeParam } from "@/lib/utils";
 
 /**
  * GET /api/pages/[source]/[chapterId]?mode=images|text
@@ -28,7 +29,10 @@ export async function GET(
   request: Request,
   ctx: { params: Promise<{ source: string; chapterId: string }> },
 ) {
-  const { source, chapterId } = await ctx.params;
+  const { source, chapterId: rawId } = await ctx.params;
+  // Next.js leaves encoded slashes (%2F) in params undecoded —
+  // decode once so adapters fetch the real chapter path.
+  const chapterId = decodeParam(rawId);
   const mode = new URL(request.url).searchParams.get("mode") ?? "images";
 
   try {

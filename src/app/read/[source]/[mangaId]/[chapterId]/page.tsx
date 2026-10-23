@@ -11,6 +11,7 @@ import { PageReader } from "@/components/reader/PageReader";
 import { ScrollReader } from "@/components/reader/ScrollReader";
 import { NovelReader } from "@/components/reader/NovelReader";
 import { PalaceMark } from "@/components/icons";
+import { decodeParam } from "@/lib/utils";
 import type { SourceChapter, SourceManga } from "@/sources/types";
 
 interface TitleData {
@@ -27,7 +28,27 @@ export default function ReadPage({
 }: {
   params: Promise<{ source: string; mangaId: string; chapterId: string }>;
 }) {
-  const { source, mangaId, chapterId } = use(params);
+  const { source, mangaId: rawMangaId, chapterId: rawChapterId } = use(params);
+  // Params arrive with encoded slashes still %2F (next.js#48058) —
+  // decode once so ids match the source lists (chapter lookup, keys).
+  const mangaId = decodeParam(rawMangaId);
+  const chapterId = decodeParam(rawChapterId);
+
+  /* Lite metadata: ONE fast getManga call. Gates the reader so a
+     novel chapter opens in seconds instead of waiting out the full
+     chapter walk (3,222 chapters ≈ 82s cold), which loads in the
+     background via titleQ for prev/next navigation. */
+  const liteQ = useQuery({
+    queryKey: ["title-lite", source, mangaId],
+    queryFn: async (): Promise<{ manga: SourceManga }> => {
+      const res = await fetch(
+        `/api/title/${encodeURIComponent(source)}/${encodeURIComponent(mangaId)}?lite=1`,
+      );
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to load");
+      return res.json();
+    },
+    staleTime: 30 * 60 * 1000,
+  });
 
   const titleQ = useQuery({
     queryKey: ["title", source, mangaId],
@@ -41,7 +62,7 @@ export default function ReadPage({
     staleTime: 10 * 60 * 1000,
   });
 
-  const manga = titleQ.data?.manga;
+  const manga = liteQ.data?.manga ?? titleQ.data?.manga;
   const chapters = useMemo(
     () => titleQ.data?.chapters ?? [],
     [titleQ.data],
@@ -53,12 +74,16 @@ export default function ReadPage({
   /* ── Cross-source fallback ────────────────────────────────────
    * Some sources (MangaDex) serve chapters from at-home nodes with
    * PARTIAL caches — some page files 404. The aggregate endpoint knows
-   * which OTHER sources carry the same chapter number, so on an image
-   * error we switch to the next source that has this chapter. This is
-   * what makes "every page shows" true even when the primary source
-   * has holes. */
+   * which OTHER sources carry the same chapter number, so when an image
+   * fails we hop to the next source that has this chapter. Paged mode
+   * renders ONE <img> at a time, so the hop fires on the FIRST failure
+   * (no threshold), and errors that land before the aggregate resolves
+   * get re-checked when it arrives. This is what makes "every page
+   * shows" true even when the primary source has holes. */
   const [srcIdx, setSrcIdx] = useState(0);
-  const [failedImages, setFailedImages] = useState<Set<number>>(() => new Set());
+  /** `${source}:${pageIndex}` tags already seen failing — dedupes repeat
+   *  error events for the same <img> element. */
+  const flagged = useRef(new Set<string>());
 
   // Candidates: [0] = the source you opened, then every other source the
   // aggregate found for this exact chapter number.
@@ -83,10 +108,23 @@ export default function ReadPage({
   const activeSource = candidates.data?.[srcIdx]?.source ?? source;
   const activeChapterId = candidates.data?.[srcIdx]?.chapterId ?? chapterId;
 
-  // Clear per-page failure marks whenever we move to a new source.
+  /** Hop to the next alternate source, if the aggregate found one. */
+  const hopSource = useCallback(() => {
+    const alts = candidates.data;
+    if (alts && srcIdx < alts.length - 1) setSrcIdx((i) => i + 1);
+  }, [candidates.data, srcIdx]);
+
+  // Image errors can land BEFORE the aggregate resolves — re-check the
+  // moment candidates arrive: if the active source already failed a
+  // page, hop right then. (After a hop the new source has no failure
+  // tags, so this can't loop.)
   useEffect(() => {
-    setFailedImages(new Set());
-  }, [activeSource]);
+    if (!candidates.data) return;
+    const failedHere = [...flagged.current].some((t) =>
+      t.startsWith(`${activeSource}:`),
+    );
+    if (failedHere) hopSource();
+  }, [candidates.data, activeSource, hopSource]);
 
   const pagesQ = useQuery({
     queryKey: [
@@ -110,33 +148,21 @@ export default function ReadPage({
   // Reset fallback state when the chapter changes.
   useEffect(() => {
     setSrcIdx(0);
-    setFailedImages(new Set());
+    flagged.current = new Set();
   }, [chapterId]);
 
-  // When an image 404s: if we have another source for this chapter, jump
-  // to it (once we've seen 2+ failures on the current source, treat the
-  // whole source as bad). Track per-page failures first so a single bad
-  // page doesn't trigger a full source switch unnecessarily.
+  // In paged mode only ONE <img> exists at a time, so a failure-count
+  // threshold could never be reached — hop on the FIRST failure instead.
+  // Hopping is harmless: every candidate is a valid copy of the same
+  // chapter, and srcIdx only moves forward (stops at the last alternate).
   const onImageError = useCallback(
     (index: number) => {
-      setFailedImages((prev) => {
-        const next = new Set(prev);
-        next.add(index);
-        // If a meaningful chunk of pages failed on this source and there's
-        // an alternate, switch.
-        const total = pagesQ.data?.pages?.length ?? 0;
-        const threshold = Math.max(2, Math.floor(total * 0.15));
-        if (
-          next.size >= threshold &&
-          candidates.data &&
-          srcIdx < candidates.data.length - 1
-        ) {
-          setSrcIdx((i) => i + 1);
-        }
-        return next;
-      });
+      const tag = `${activeSource}:${index}`;
+      if (flagged.current.has(tag)) return; // one hop per failed page
+      flagged.current.add(tag);
+      hopSource();
     },
-    [pagesQ.data?.pages?.length, candidates.data, srcIdx],
+    [activeSource, hopSource],
   );
 
   /* ── Library wiring ─────────────────────────────────────────── */
@@ -231,7 +257,9 @@ export default function ReadPage({
     : undefined;
 
   const body = (() => {
-    if (titleQ.isPending || pagesQ.isPending) {
+    // Gated on the LITE metadata + pages only — the full chapter list
+    // (titleQ) streams in behind the reader for prev/next nav.
+    if (liteQ.isPending || pagesQ.isPending) {
       return (
         <div className="grid h-dvh place-items-center">
           <div className="flex flex-col items-center gap-4">
@@ -242,10 +270,10 @@ export default function ReadPage({
       );
     }
 
-    if (titleQ.isError || pagesQ.isError) {
+    if (liteQ.isError || pagesQ.isError) {
       const message =
         (pagesQ.error as Error)?.message ??
-        (titleQ.error as Error)?.message ??
+        (liteQ.error as Error)?.message ??
         "Something went wrong";
       return (
         <div className="grid h-dvh place-items-center px-6">
@@ -254,10 +282,11 @@ export default function ReadPage({
               Couldn’t load this chapter
             </h2>
             <p className="mt-2 text-sm break-words text-mist">{message}</p>
-            <div className="mt-5 flex justify-center gap-3">
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
               <button
                 onClick={() => {
                   void pagesQ.refetch();
+                  void liteQ.refetch();
                   void titleQ.refetch();
                 }}
                 className="rounded-xl bg-flame/15 px-5 py-2.5 text-sm font-medium text-flame ring-1 ring-flame/40 hover:bg-flame/25"
