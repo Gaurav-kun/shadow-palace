@@ -24,16 +24,41 @@ repository must be public, or you must be a collaborator.
 
 ### On your own computer
 
-1. Install [Node.js](https://nodejs.org) (version 20.9 or newer).
-2. On this page, click **Code → Download ZIP** and extract the file.
-3. Open a terminal in the extracted folder and run:
+You need [Node.js](https://nodejs.org) version 20.9 or newer and, for
+these steps, [Git](https://git-scm.com). Run each block in a terminal.
 
-   ```bash
-   npm install
-   npm run dev
-   ```
+```bash
+# 1. Create a folder for the project and move into it
+mkdir shadow-palace
+cd shadow-palace
+```
 
-4. Open <http://localhost:3000>.
+```bash
+# 2. Download the code into the current folder
+git clone https://github.com/Gaurav-kun/shadow-palace.git .
+```
+
+```bash
+# 3. Install dependencies (only the first time — takes a minute)
+npm install
+```
+
+```bash
+# 4. Start the app
+npm run dev
+```
+
+Then open <http://localhost:3000>. Leave the terminal running; stop the
+app with `Ctrl + C`.
+
+<details>
+<summary>No Git? Download the files as a ZIP instead</summary>
+
+Click the repository's green <kbd>Code</kbd> button, choose
+**Download ZIP**, extract it, then run `npm install` and `npm run dev`
+inside the extracted folder.
+
+</details>
 
 | Problem | Solution |
 | --- | --- |
