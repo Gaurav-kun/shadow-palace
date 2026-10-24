@@ -66,6 +66,49 @@ inside the extracted folder.
 | Page reloads forever in development | Run `npm run dev:reset` |
 | First load is slow | Expected; the dev server compiles on first request, later loads are fast |
 
+## Install as an app (PWA)
+
+Shadow Palace is a progressive web app. Once it is running and open in
+your browser, you can install it so it opens in its own window with a
+dock/taskbar icon, instead of a browser tab. The steps depend on the
+device.
+
+### Android (Chrome)
+
+1. Open the app in Chrome.
+2. Tap the **⋮** menu (top right).
+3. Choose **Add to Home screen** or **Install app**.
+4. Confirm. It appears in your app drawer and opens full-screen.
+
+### iPhone / iPad (Safari)
+
+1. Open the app in Safari.
+2. Tap the **Share** button (square with an arrow).
+3. Scroll down and tap **Add to Home Screen**.
+4. Tap **Add** (top right). It appears on your home screen.
+
+Safari does not support installing from other browsers on iOS — it must
+be Safari.
+
+### Desktop (Chrome, Edge, or Brave)
+
+1. Open the app in the browser.
+2. Click the **install icon** in the address bar (a monitor with a down
+   arrow), or open the main menu and choose **Install Shadow Palace…**
+3. Confirm. It opens in a standalone window and pins to your dock,
+   taskbar, or applications folder.
+
+### Notes
+
+- The app is served over `http://localhost` or a plain-HTTP host, which
+  some browsers treat as non-secure. If **Install app** / **Add to Home
+  screen** is missing or greyed out, the browser wants HTTPS. On your own
+  machine, `localhost` is usually exempt; on a remote host, put it behind
+  HTTPS (a reverse proxy or your host's TLS) and the option appears.
+- Your library, history, and settings live in the browser's local storage
+  on each device. They are not shared between devices unless you export
+  the library as JSON (from the Library page) and import it elsewhere.
+
 ## Sources
 
 Sources are pluggable adapters behind one interface (`SourceAdapter` in
