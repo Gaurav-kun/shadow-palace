@@ -9,10 +9,9 @@ home-screen app on mobile. The interface is dark by design.
 
 ![Shadow Palace shown on a laptop and a phone](docs/demo.gif)
 
-The same tour as a page you can run yourself: open
-[`public/demo.html`](public/demo.html) in a browser after downloading
-the repository. The clip above cycles through every screen listed
-below.
+The clip above cycles through every screen listed below. The same
+tour is included in the repository and opens directly in a browser:
+[`public/demo.html`](public/demo.html) — no server required.
 
 ## Screens
 
@@ -54,7 +53,7 @@ with adjustable size and line height.
 
 ## Running it
 
-There are two ways to run Shadow Palace. Neither requires money.
+There are two ways to run Shadow Palace; both are free.
 
 ### In the browser, nothing to install
 
@@ -62,8 +61,8 @@ There are two ways to run Shadow Palace. Neither requires money.
 
 Click the button above. GitHub builds the project in a cloud container
 (a few minutes the first time) and starts it. When the bottom bar shows
-a forwarded port **3000**, click **Open in Browser**. That is the whole
-procedure.
+a forwarded port **3000**, open it in the browser. No further steps are
+required.
 
 Codespaces sleeps after inactivity and wakes when the tab is reopened.
 A free GitHub account includes enough hours for occasional use. The
@@ -86,7 +85,7 @@ git clone https://github.com/Gaurav-kun/shadow-palace.git .
 ```
 
 ```bash
-# 3. Install dependencies (only the first time — takes a minute)
+# 3. Install dependencies (first run only)
 npm install
 ```
 
@@ -159,7 +158,7 @@ be Safari.
 ## Sources
 
 Sources are pluggable adapters behind one interface (`SourceAdapter` in
-`src/sources/`). Eight are implemented and working:
+`src/sources/`). Eight are implemented:
 
 | Source | Type | Notes |
 | --- | --- | --- |
@@ -223,11 +222,11 @@ npm run start
 npm run lint
 ```
 
-If the dev server ever gets stuck in a reload loop — the page keeps
-refreshing and every request shows "compiling…" — its watcher state has
-gone bad. Stop it with `npm run dev:reset`, which kills every process of
-the project, clears the Turbopack dev cache, and starts a fresh server.
-Stopping the terminal tab alone does not always clear it.
+If the development server enters a reload loop — the page refreshes
+continuously and every request shows `compiling…` — its watcher state is
+stale. `npm run dev:reset` stops all processes of the project, clears
+the Turbopack dev cache, and starts a fresh server. Stopping the
+terminal alone does not always clear the state.
 
 ## Deploy
 
