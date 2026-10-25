@@ -5,6 +5,53 @@ novels. It runs as a single Node process, stores your library in the
 browser, and installs as a PWA — a separate window on desktop, a
 home-screen app on mobile. The interface is dark by design.
 
+## Preview
+
+![Shadow Palace shown on a laptop and a phone](docs/demo.gif)
+
+The same tour as a page you can run yourself: open
+[`public/demo.html`](public/demo.html) in a browser after downloading
+the repository. The clip above cycles through every screen listed
+below.
+
+## Screens
+
+### Discover
+
+The home page lists followed titles with release estimates, recent
+chapters from the library, and a global search bar. Search queries all
+eight sources at once with per-source filters. The seasonal chart
+shows what is airing, sourced from AniList, with season, year, and
+sort controls.
+
+| Home | Search | Seasonal chart |
+|:---:|:---:|:---:|
+| ![Home: follows, updates and search](docs/shots/home.jpg) | ![Search across all sources](docs/shots/search.png) | ![Seasonal chart with filters](docs/shots/chart.png) |
+| Follows, release estimates, latest chapters. | One query across every source. | Season, year, and sort filters. |
+
+### Library and details
+
+The library holds shelves, reading history, and JSON export/import.
+A series page combines the source's metadata with AniList and Comick
+ratings, the main cast, and a chapter list merged from all sources
+that carry the title, with release dates and a filter box.
+
+| Library | Series page | Chapters |
+|:---:|:---:|:---:|
+| ![Library shelves and history](docs/shots/library.jpg) | ![Series page with ratings and cast](docs/shots/bias.png) | ![Merged chapter list](docs/shots/biasCh.jpg) |
+| Shelves, history, export and import. | Ratings, cast, synopsis, resume. | Merged sources, filter, dates. |
+
+### Reading
+
+Manhwa reads as a vertical scroll on the phone; manga supports
+paged and scroll modes; novels get a typography-focused reading view
+with adjustable size and line height.
+
+| Novel reader | Phone series page | Phone chapter |
+|:---:|:---:|:---:|
+| ![Novel reading view](docs/shots/novel.png) | ![Series page on a phone](docs/shots/vSeries.jpg) | ![Chapter on a phone](docs/shots/m_ch1.png) |
+| Drop cap, serif text, size controls. | Ratings, tags, resume, follow. | Full-screen webtoon scroll. |
+
 ## Running it
 
 There are two ways to run Shadow Palace. Neither requires money.
