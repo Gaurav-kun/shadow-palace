@@ -260,3 +260,81 @@ export function PalaceMark({ size = 32, ...props }: { size?: number } & IconProp
     </svg>
   );
 }
+
+/** App icon — the detailed palace silhouette from the PWA icon (public/icon.svg). */
+export function AppIcon({ size = 32, ...props }: { size?: number } & IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      fill="none"
+      suppressHydrationWarning
+      {...props}
+    >
+      <defs>
+        <linearGradient id="app-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#1a1333" />
+          <stop offset="1" stopColor="#07060b" />
+        </linearGradient>
+        <linearGradient id="app-gold" x1="0" y1="34" x2="0" y2="49" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#fef3c7" />
+          <stop offset="1" stopColor="#f59e0b" />
+        </linearGradient>
+        <radialGradient id="app-halo" cx="32" cy="23.5" r="19" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#fbbf24" stopOpacity="0.42" />
+          <stop offset="1" stopColor="#fbbf24" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="app-moon" cx="32" cy="23.5" r="11" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#fef9ec" />
+          <stop offset="1" stopColor="#fde68a" />
+        </radialGradient>
+      </defs>
+
+      {/* night sky */}
+      <rect width="64" height="64" rx="14" fill="url(#app-bg)" />
+
+      {/* stars */}
+      <circle cx="11" cy="12.5" r="0.85" fill="#fef3c7" opacity="0.75" />
+      <circle cx="53" cy="10.5" r="0.65" fill="#fef3c7" opacity="0.5" />
+      <circle cx="49" cy="17.5" r="0.55" fill="#fef3c7" opacity="0.38" />
+      <circle cx="14" cy="20.5" r="0.55" fill="#fef3c7" opacity="0.45" />
+      <circle cx="50.5" cy="25" r="0.5" fill="#fef3c7" opacity="0.3" />
+
+      {/* moon + halo */}
+      <circle cx="32" cy="23.5" r="19" fill="url(#app-halo)" />
+      <circle cx="32" cy="23.5" r="11" fill="url(#app-moon)" />
+
+      {/* palace silhouette */}
+      <g fill="#07060b">
+        {/* finial */}
+        <circle cx="32" cy="12.7" r="1.05" />
+        <rect x="31.4" y="13.6" width="1.2" height="2.8" />
+
+        {/* top roof */}
+        <path d="M22.8 20.8 C26.2 20.0 29.2 18.0 32 16.2 C34.8 18.0 37.8 20.0 41.2 20.8 C38.2 22.6 35.2 23.4 32 23.4 C28.8 23.4 25.8 22.6 22.8 20.8 Z" />
+        <rect x="27.9" y="23.2" width="8.2" height="4.6" />
+
+        {/* middle roof */}
+        <path d="M17.2 30.0 C21.8 29.0 27.0 26.4 32 24.2 C37 26.4 42.2 29.0 46.8 30.0 C42.4 32.4 37.2 33.5 32 33.5 C26.8 33.5 21.6 32.4 17.2 30.0 Z" />
+        <rect x="24.6" y="33.3" width="14.8" height="6.0" />
+
+        {/* bottom roof */}
+        <path d="M12.2 41.0 C17.8 39.8 24.8 36.6 32 34.0 C39.2 36.6 46.2 39.8 51.8 41.0 C46.2 43.8 39.2 45.2 32 45.2 C24.8 45.2 17.8 43.8 12.2 41.0 Z" />
+        <rect x="20" y="45.0" width="24" height="3.8" />
+      </g>
+
+      {/* lit windows */}
+      <g fill="url(#app-gold)">
+        <rect x="27.0" y="34.6" width="2.6" height="2.2" rx="0.45" />
+        <rect x="34.4" y="34.6" width="2.6" height="2.2" rx="0.45" />
+        <rect x="23.4" y="45.6" width="2.6" height="2.2" rx="0.45" />
+        <rect x="38.0" y="45.6" width="2.6" height="2.2" rx="0.45" />
+        <path d="M30.3 48.8 V46.4 A1.7 1.7 0 0 1 33.7 46.4 V48.8 Z" />
+      </g>
+
+      {/* ground shadow */}
+      <ellipse cx="32" cy="48.9" rx="16.5" ry="1.5" fill="#07060b" />
+    </svg>
+  );
+}

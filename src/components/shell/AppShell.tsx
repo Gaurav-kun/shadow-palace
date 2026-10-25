@@ -7,7 +7,7 @@ import {
   ChartIcon,
   HomeIcon,
   LibraryIcon,
-  PalaceMark,
+  AppIcon,
   SearchIcon,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop rail */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[84px] flex-col items-center border-r border-veil/40 bg-abyss/80 backdrop-blur-xl lg:flex">
         <Link href="/" className="mt-5 mb-6" aria-label="Shadow Palace home">
-          <PalaceMark size={38} />
+          <AppIcon size={38} />
         </Link>
         <nav className="flex flex-1 flex-col items-center gap-2">
           {TABS.map(({ href, label, Icon }) => {
@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile top bar */}
       <header className="safe-pt sticky top-0 z-40 flex items-center gap-3 border-b border-veil/40 bg-abyss/85 px-4 py-3 backdrop-blur-xl lg:hidden">
-        <PalaceMark size={28} />
+        <AppIcon size={28} />
         <h1 className="font-display text-[15px] font-semibold tracking-wide">
           Shadow <span className="text-gradient">Palace</span>
         </h1>
