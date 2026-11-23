@@ -83,6 +83,7 @@ export function UpdatesSection() {
                 <CoverImage
                   src={e.coverImage}
                   alt={e.title}
+                  source={e.source}
                   className="h-full w-full"
                 />
               </div>

@@ -128,6 +128,7 @@ export default async function TitlePage({
             <CoverImage
               src={manga.coverImage}
               alt={manga.title}
+              source={source}
               eager
               className="aspect-2/3 w-full rounded-2xl ring-1 ring-flame/25 shadow-2xl shadow-flame-deep/10"
             />

@@ -298,8 +298,22 @@ async function createEngine(): Promise<TokenEngine> {
   // 3) The polyfill exposes `extendClient`, which installs an axios request
   //    interceptor that appends the `vrf` token. Feed it a stub client and
   //    keep the interceptor for signing our own requests.
+  //    Builds vary: older ones define a bare `extendClient` global; newer
+  //    ones hang it off a namespaced object on globalThis (e.g.
+  //    `globalThis.vmc_<hash>.extendClient`), so scan globals for it.
   const install = vm.runInContext(
-    "typeof extendClient === 'function' ? extendClient : null",
+    `(() => {
+       if (typeof extendClient === "function") return extendClient;
+       const g = typeof globalThis !== "undefined" ? globalThis : self;
+       for (const k of Object.getOwnPropertyNames(g)) {
+         try {
+           const v = g[k];
+           if (v && (typeof v === "object" || typeof v === "function") &&
+               typeof v.extendClient === "function") return v.extendClient;
+         } catch {}
+       }
+       return null;
+     })()`,
     ctx,
   ) as ((client: unknown) => void) | null;
   if (!install) {

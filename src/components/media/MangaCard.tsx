@@ -33,6 +33,7 @@ export function MangaCard({
         <CoverImage
           src={coverImage}
           alt={title}
+          source={source}
           className="h-full w-full transition-transform duration-500 group-hover:scale-[1.06]"
         />
         {/* Hover sheen */}

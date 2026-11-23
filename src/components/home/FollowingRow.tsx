@@ -59,6 +59,7 @@ export function FollowingRow() {
               <CoverImage
                 src={e.coverImage}
                 alt={e.title}
+                source={e.source}
                 className="h-full w-full transition-transform duration-500 group-hover:scale-[1.05]"
               />
               {unread > 0 && (

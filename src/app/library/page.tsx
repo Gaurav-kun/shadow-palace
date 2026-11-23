@@ -209,6 +209,7 @@ export default function LibraryPage() {
                   <CoverImage
                     src={e.coverImage}
                     alt={e.title}
+                    source={e.source}
                     className="h-full w-full"
                   />
                 </div>
@@ -261,6 +262,7 @@ function ShelfCard({
           <CoverImage
             src={e.coverImage}
             alt={e.title}
+            source={e.source}
             className="h-full w-full transition-transform duration-500 group-hover:scale-[1.05]"
           />
           <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-void/90 to-transparent p-2 pt-6">

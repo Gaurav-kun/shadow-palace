@@ -11,18 +11,23 @@ import { SourceError, type SourceKind } from "./types";
 /**
  * Comix (comix.to) — modern SPA backed by a private JSON API at /api/v1.
  *
- * The API is the same one the site's own frontend uses, but every GET to a
- * /manga or /chapters route must carry a `_` request token: the site's
- * obfuscated bundle (apicore-*.js) ships a static 1088-byte key and signs
- * each request as
+ * The API signs every GET with a `_` query token and answers some endpoints
+ * encrypted as {"e": "<payload>"}. Both secrets live inside the site's
+ * obfuscated apicore-*.js bundle and rotate with each deploy — a hardcoded
+ * key extracted in Oct 2026 was retired within weeks ("key_retired").
  *
- *   _ = "85c." + base64url(HMAC-ish SHA-256(key, "/<path>?<raw query>")).slice(0, 16)
+ * Instead of chasing the scheme, this adapter downloads the bundle the site
+ * itself ships and runs it in Node behind a small DOM shim plus a stub
+ * XMLHttpRequest whose send() performs the real fetch. Their own request
+ * interceptor then signs each call and their response interceptor decrypts
+ * payloads — byte-for-byte what the site's own SPA does, and it keeps
+ * working across key/build rotations because the current bundle is always
+ * the one being executed. If the API rejects a token (403), the bundle is
+ * re-downloaded and the call retried once.
  *
- * where the SHA-256 is standard HMAC-SHA256 with block size 64, re-implemented
- * here directly (see signToken). Chapter-list and reader responses come back
- * encrypted as {"e": base64url} and are decrypted with an XOR keystream built
- * from key bytes 64..1088 (see decryptPayload). Both schemes were verified
- * byte-for-byte against the live site in Oct 2026.
+ * Their mappers rename response fields (title -> D3, hid -> pn, ...). Those
+ * names are literal in their source, so they only change if comix rewrites
+ * the mappers themselves.
  *
  * Adapter-local id formats:
  *   - manga id  = comix "hid", the short hash at the head of every title URL,
@@ -31,253 +36,483 @@ import { SourceError, type SourceKind } from "./types";
  *                 /title/.../11537036-chapter-151
  */
 
-const API = "https://comix.to/api/v1";
+const SITE = "https://comix.to";
 const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 
 /** All GETs send these; they emulate a clean (devtools-closed) browser. */
 const CLEAN_QUERY = { v: "0", w: "0" } as const;
 
-/** comix.to's request-token key id (token = KEY_ID + "." + digest). */
-const KEY_ID = "85c";
+/* ------------------------------------------------------------------ */
+/* Mapped response shapes (their mappers' literal output keys)         */
+/* ------------------------------------------------------------------ */
 
-/** Static signing/decryption key shipped in comix.to's frontend bundle (1088 bytes). */
-const KEY_B64 =
-  "XpOShWwheTHIkGXidFSTL1oYMgvi2hpjl1PmEYPEjPNTLjF9jRFsQ5Jg+Cdd45T89AiXh68Q+5vLUMDXw4Ux0OdmeMnc4vHwQu11IpyErPIEU3shaUrMIdeL+PNPMWewy6Lt6iteudqvU2Nfy2hzXXKvY6JZZ2NGvyAeVu1RbyHP9kUpvQ61cKR5dhn3abmAucrq2ajCzueN7PyZjOkpwK3Chf24u56USGDjFBnyar/QJFJ11PryI8funXGc0xlaBYVDF2WSWgFr2zD8cwlk72ksb1mj/oNqeEb5aUnfRe1dAwCLC2Z+QnpnqafT7x5M6rAyZo6FE7+q8gazMsyvfQn/FoBCCoNhewm8Uk+w3Ek5gQ+2yCD739lNnuUc6XiYryZAq1YuPEzpfLixikUjlnFRAR4mcL5AAUAXHrVaiIgQKPhBkC2SR1pcuTxcWLFSAogQT+pbKJadJVfISDf/Uh+zxSzfeHH/NaJSHNnY1HqpCGTPILoPzdf9aWFrYZsBUgRKawfRcp4SpNIgVEkoPqFc0KgcuDOS+FuU7pkvx7/SOS3JQgSKygHNr0YjM7pPwUWKPu57zdA+Deoi4ihu24R9kuiEOYoGwZwQbeOedKkDyCaRKY9hnWNBoo+vzOSV5Sa+melsSSmHWt6INmk7hUMptAZUGe/FhO/RW2jdJAXQM6R1FTX8MN2zE0JJlXs8wlhdRu36YtlvwKkQOUVnX1vUJYlmh8Xn9zKZ7jSWrpCNwlMBl0Cl6vgSDo7FZEsgCvkhIkQ2VxvmS51gRCjZVm2O0buoUt8Xco2mMdBRLcpwBxQ58Uq+v/EZMtDof8fV5EH3wYn+VcdskO7KArnmi99kYvweLfyKsjlIw/PI0yh/aYIrZSJp2Ati2MjsqInLjSXc8LRuOO37i8DWVrs6Jet+/k8oxDK/BbgUmFFGfdPHmEgx2eXV3XDrkNXupUpsQo2reFvKHldU11aPlhkgGxcm5cAP6O7ohThAGgTB3FHbOadcJpw4Dpw+e5gEKIOBXIdEaZm/7XjwQqBcK8g+BKOQEMaB+FtQc7s2SxUilnh/HRYP9OMiuf5TE5JboAw9WXYoNHlvaMpv0rOYwRI04YsaWLvGJg9Lg3s2zJa22p1HTV5EjKsXf8dZamM/IcHWN+pVPbFh9GVVilAUoCF9pRP+xPuLg08eSzaM/JwDBz4eXFZRc6cg3cJBA/jB0BX0S9y2sl0bPlGJJNgvte0DWsKsb+Ae3IM6QCyf+n29TjNuqJWfzkLjPi8G3DqhVlQR6n7cuu6ljR0jaC/qR70KzPHAiqtmjcqHekLucowiOkknHLl630AybcGjixdxpYlBr22UFnl8Ac3vfN7ncNZ5ek7X4QXyovT3im9B0i1ltpfGeap6hOPtHCUdxCvQdqrTGqSuK+fdgLgIoc8fgW0YOZ2z4eyG6IdzEXjtKAzF7kM=";
-
-let keyBytes: Uint8Array | null = null;
-function key(): Uint8Array {
-  // Buffer is available in the Next.js server runtime (this module is server-only).
-  return (keyBytes ??= new Uint8Array(Buffer.from(KEY_B64, "base64")));
+/** Raw poster {medium,large} is mapped to {gH: 280px thumb, Qh: full}. */
+interface MxPoster {
+  gH?: string; // "/images/covers/...@280.jpg"
+  Qh?: string; // "/images/covers/....jpg"
 }
 
-// ---------------------------------------------------------------------------
-// Request signing: HMAC-SHA256(key, input) using the site's construction —
-// SHA-256 compression started directly from the key's first 64 bytes as the
-// inner/outer states (equivalent to HMAC with pre-hashed ipad/opad blocks).
-// ---------------------------------------------------------------------------
-
-const SHA_K = new Uint32Array([
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-]);
-
-const rotr = (x: number, n: number): number => (x >>> n) | (x << (32 - n));
-
-/** SHA-256 compression continued from a preloaded 8-word state; lenOffset = bytes already "hashed". */
-function sha256Continue(state: Uint32Array, data: Uint8Array, lenOffset: number): Uint32Array {
-  const st = Uint32Array.from(state);
-  const total = lenOffset + data.length;
-  let padded = data.length + 1;
-  while (padded % 64 !== 56) padded++;
-  const buf = new Uint8Array(padded + 8);
-  buf.set(data);
-  buf[data.length] = 0x80;
-  const bits = 8 * total;
-  const hi = Math.floor(bits / 4294967296);
-  const lo = bits >>> 0;
-  const s = buf.length - 8;
-  buf[s] = hi >>> 24 & 255; buf[s + 1] = hi >>> 16 & 255; buf[s + 2] = hi >>> 8 & 255; buf[s + 3] = hi & 255;
-  buf[s + 4] = lo >>> 24 & 255; buf[s + 5] = lo >>> 16 & 255; buf[s + 6] = lo >>> 8 & 255; buf[s + 7] = lo & 255;
-
-  const w = new Uint32Array(64);
-  for (let off = 0; off < buf.length; off += 64) {
-    for (let t = 0; t < 16; t++) {
-      const p = off + 4 * t;
-      w[t] = buf[p] << 24 | buf[p + 1] << 16 | buf[p + 2] << 8 | buf[p + 3];
-    }
-    for (let t = 16; t < 64; t++) {
-      const s0 = rotr(w[t - 15], 7) ^ rotr(w[t - 15], 18) ^ (w[t - 15] >>> 3);
-      const s1 = rotr(w[t - 2], 17) ^ rotr(w[t - 2], 19) ^ (w[t - 2] >>> 10);
-      w[t] = (w[t - 16] + s0 + w[t - 7] + s1) | 0;
-    }
-    let [a, b, c, d, e, f, g, h] = st;
-    for (let t = 0; t < 64; t++) {
-      const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
-      const ch = (e & f) ^ (~e & g);
-      const t1 = (h + s1 + ch + SHA_K[t] + w[t]) | 0;
-      const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
-      const maj = (a & b) ^ (a & c) ^ (b & c);
-      const t2 = (s0 + maj) | 0;
-      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
-    }
-    st[0] = (st[0] + a) | 0; st[1] = (st[1] + b) | 0; st[2] = (st[2] + c) | 0; st[3] = (st[3] + d) | 0;
-    st[4] = (st[4] + e) | 0; st[5] = (st[5] + f) | 0; st[6] = (st[6] + g) | 0; st[7] = (st[7] + h) | 0;
-  }
-  return st;
+/** El-mapper output for {id,title}[] lists (genres, authors, ...). */
+interface MxNamed {
+  Ob?: number | string;
+  D3?: string;
 }
 
-function stateFrom(bytes: Uint8Array): Uint32Array {
-  const st = new Uint32Array(8);
-  for (let i = 0; i < 8; i++) {
-    st[i] = bytes[4 * i] << 24 | bytes[4 * i + 1] << 16 | bytes[4 * i + 2] << 8 | bytes[4 * i + 3];
-  }
-  return st;
+/** tl() output for the pagination meta block. */
+interface MxMeta {
+  ub?: number; // total
+  Qt?: number; // per_page
+  Bz?: number; // current page
+  CE?: number; // last_page
 }
 
-function stateToBytes(st: Uint32Array): Uint8Array {
-  const out = new Uint8Array(32);
-  for (let i = 0; i < 8; i++) {
-    out[4 * i] = st[i] >>> 24 & 255;
-    out[4 * i + 1] = st[i] >>> 16 & 255;
-    out[4 * i + 2] = st[i] >>> 8 & 255;
-    out[4 * i + 3] = st[i] & 255;
-  }
-  return out;
+/** Bl-mapper output for a manga (search item and detail share it). */
+interface MxItem {
+  WL?: number; // id
+  pn?: string; // hid
+  D3?: string; // title
+  WX?: string; // type ("manga" | "manhwa" | ...)
+  sG?: string; // status
+  E2?: MxPoster | null; // poster
+  S_?: number; // latestChapter
+  LT?: string; // synopsis
+  Vu?: number; // year
+  Fx?: MxNamed[]; // genres
+  tr?: MxNamed[]; // authors
+  gY?: MxNamed[]; // artists
 }
 
-const B64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-function base64url(bytes: Uint8Array): string {
-  let out = "";
-  for (let i = 0; i < bytes.length; i += 3) {
-    const l = bytes[i];
-    const m = bytes[i + 1];
-    const r = bytes[i + 2];
-    out += B64URL[l >> 2] + B64URL[((3 & l) << 4) | (m >> 4)];
-    if (i + 1 < bytes.length) out += B64URL[((15 & m) << 2) | (r >> 6)];
-    if (i + 2 < bytes.length) out += B64URL[63 & r];
-  }
-  return out;
+interface MxSearch {
+  q7?: MxItem[];
+  Bi?: MxMeta;
 }
 
-/** "<keyId>.<16 chars of base64url HMAC>" — the `_` query param /manga and /chapters GETs require. */
-function signToken(input: string): string {
-  const k = key();
-  const inner = sha256Continue(stateFrom(k.subarray(0, 32)), new TextEncoder().encode(input), 64);
-  const outer = sha256Continue(stateFrom(k.subarray(32, 64)), stateToBytes(inner), 64);
-  return `${KEY_ID}.${base64url(stateToBytes(outer)).slice(0, 16)}`;
+/** ln-mapper output for a chapter row. */
+interface MxChapter {
+  xu?: number; // id
+  XK?: number; // number
+  od?: string; // name
+  dg?: string; // language
 }
 
-// ---------------------------------------------------------------------------
-// Response decryption: chapter list / reader endpoints answer {"e": "<b64url>"}.
-// Keystream = key bytes 64..1088 rotated by the seed in the first two cipher
-// bytes; JSON starts at plaintext byte 2.
-// ---------------------------------------------------------------------------
+interface MxChapters {
+  q7?: MxChapter[];
+  Bi?: MxMeta;
+}
 
-function decryptPayload(e: string): unknown {
-  const data = new Uint8Array(Buffer.from(e, "base64url"));
-  if (data.length < 4) throw new SourceError("comix.to returned a truncated payload", "comix");
-  const seed = (data[0] << 8 | data[1]) % 1024;
-  const k = key();
-  for (let u = 2; u < data.length; u++) {
-    data[u] = data[u] ^ k[64 + ((u - 2 + seed) % 1024)];
-  }
-  const text = new TextDecoder().decode(data.subarray(2));
+/** Chapter detail = ln row + tM: page list (nn mapper). */
+interface MxChapterDetail extends MxChapter {
+  tM?: { f6?: string }[]; // f6 = absolute image url
+}
+
+/** The two exported services we call; picked dynamically (see pickServices). */
+interface ComixEngine {
+  f: {
+    Cj(query: Record<string, unknown>): Promise<MxSearch>;
+    Aq(hid: string): Promise<MxItem>;
+    Pr(hid: string, query: Record<string, unknown>): Promise<MxChapters>;
+  };
+  n: {
+    Aq(chapterId: string): Promise<MxChapterDetail>;
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* DOM shim + stub XHR (installed before importing their bundle)       */
+/* ------------------------------------------------------------------ */
+
+const noop = () => {};
+
+function stubElement() {
+  return {
+    style: {},
+    setAttribute: noop,
+    getAttribute: () => null,
+    appendChild: noop,
+    addEventListener: noop,
+    removeEventListener: noop,
+    click: noop,
+    href: "",
+    textContent: "",
+    innerHTML: "",
+    children: [],
+    firstChild: null,
+  };
+}
+
+/**
+ * Any unknown property resolves to a callable that returns itself, so their
+ * defensive/protection code can call `window.foo()` without exploding.
+ */
+const universal: unknown = new Proxy(function universalStub() {}, {
+  get(_t, p) {
+    if (p === Symbol.toPrimitive) return () => "";
+    if (p === "toString") return () => "";
+    if (p === Symbol.iterator) return function* () {};
+    if (p === "then") return undefined;
+    return universal;
+  },
+  apply() {
+    return universal;
+  },
+  construct() {
+    return universal as object;
+  },
+  set() {
+    return true;
+  },
+  has() {
+    return true;
+  },
+});
+
+function installDomStubs() {
+  const g = globalThis as Record<string, unknown>;
+  if (g.__comixStubs) return;
+  g.__comixStubs = true;
+
+  const doc = {
+    createElement: stubElement,
+    createElementNS: stubElement,
+    getElementById: () => null,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    addEventListener: noop,
+    removeEventListener: noop,
+    documentElement: stubElement(),
+    head: stubElement(),
+    body: stubElement(),
+    cookie: "",
+    visibilityState: "visible",
+  };
+  const loc = new Proxy(
+    {
+      href: `${SITE}/`,
+      origin: SITE,
+      protocol: "https:",
+      hostname: "comix.to",
+      port: "",
+      pathname: "/",
+      search: "",
+      hash: "",
+      assign: noop,
+      replace: noop,
+      reload: noop,
+    },
+    { get: (t, p) => (p in t ? (t as Record<string, unknown>)[p as string] : universal) },
+  );
+  const win = new Proxy(
+    { document: doc, location: loc, origin: SITE, self: null, top: null },
+    { get: (t, p) => (p in t ? (t as Record<string, unknown>)[p as string] : universal) },
+  );
+
+  g.window = win;
+  g.self = win;
+  g.document = new Proxy(doc, {
+    get: (t, p) => (p in t ? (t as Record<string, unknown>)[p as string] : universal),
+  });
+  g.location = loc;
+  g.localStorage = {
+    getItem: () => null,
+    setItem: noop,
+    removeItem: noop,
+    clear: noop,
+    key: () => null,
+    length: 0,
+  };
+  g.sessionStorage = g.localStorage;
   try {
-    return JSON.parse(text);
-  } catch {
-    // Their parser stops at the end of the JSON document; tolerate trailing bytes.
-    const end = text.lastIndexOf("}");
-    if (end !== -1) return JSON.parse(text.slice(0, end + 1));
-    throw new SourceError("comix.to response could not be decrypted (site may have changed)", "comix");
-  }
-}
-
-// ---------------------------------------------------------------------------
-// API plumbing
-// ---------------------------------------------------------------------------
-
-interface ComixResult<T> {
-  status?: string;
-  result?: T;
-  message?: string;
-}
-
-async function apiGet<T>(path: string, query: Record<string, string | number> = {}): Promise<T> {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(query)) params.set(k, String(v));
-
-  // The signature covers the query with raw (decoded) values, in send order,
-  // exactly like the site's own serializer. `_` itself is never signed.
-  const raw = [...params.entries()].map(([k, v]) => `${k}=${v}`).join("&");
-  const token = signToken(raw ? `${path}?${raw}` : path);
-  params.append("_", token);
-
-  let res: Response;
-  try {
-    res = await fetch(`${API}${path}?${params}`, {
-      headers: {
-        "User-Agent": UA,
-        Accept: "application/json",
-        "Accept-Language": "en-US,en;q=0.5",
-      },
-      cache: "no-store",
+    Object.defineProperty(g, "navigator", {
+      value: { userAgent: UA, language: "en-US", platform: "Win32", languages: ["en-US"] },
+      configurable: true,
     });
-  } catch (err) {
-    throw new SourceError(`Comix unreachable: ${err}`, "comix", 503);
+  } catch {
+    /* Node ships a getter-only navigator; leave it if it can't be replaced */
   }
+  g.XMLHttpRequest = StubXHR;
+}
 
-  const bodyText = await res.text();
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const err = JSON.parse(bodyText) as { message?: string; code?: string };
-      if (err.code === "missing_token" || err.code === "invalid_token") {
-        message =
-          "comix.to rejected its request token — the site frontend may have rotated its signing key";
-      } else if (err.message) {
-        message = err.message;
+/**
+ * Their axios instance talks to this instead of a browser XHR: open()
+ * resolves the (relative) URL, send() does the real fetch, and every
+ * response header is forwarded — their decrypt gate reads one of them.
+ */
+class StubXHR {
+  upload = { addEventListener: noop, removeEventListener: noop };
+  readyState = 0;
+  status = 0;
+  response: unknown = null;
+  responseText = "";
+  responseURL = "";
+  timeout = 0;
+  withCredentials = false;
+  onreadystatechange: (() => void) | null = null;
+  onload: (() => void) | null = null;
+  onloadend: (() => void) | null = null;
+  onerror: ((err: unknown) => void) | null = null;
+
+  private url = "";
+  private reqHeaders: Record<string, string> = {};
+  private respHeaders: Record<string, string> = {};
+  private headerLines = "";
+
+  open(_method: string, url: string) {
+    this.url = new URL(url, SITE).href;
+  }
+  setRequestHeader(key: string, value: string) {
+    this.reqHeaders[key] = value;
+  }
+  getAllResponseHeaders() {
+    return this.headerLines;
+  }
+  getResponseHeader(key: string) {
+    return this.respHeaders[key.toLowerCase()] ?? null;
+  }
+  abort() {}
+  addEventListener(event: string, fn: () => void) {
+    (this as unknown as Record<string, unknown>)[`on${event}`] = fn;
+  }
+  removeEventListener() {}
+
+  send() {
+    void (async () => {
+      const headers: Record<string, string> = {
+        "User-Agent": UA,
+        Accept: "application/json,*/*",
+        Referer: `${SITE}/`,
+      };
+      for (const [k, v] of Object.entries(this.reqHeaders)) {
+        const lk = k.toLowerCase();
+        if (lk === "host" || lk === "content-length" || lk === "connection") continue;
+        headers[k] = v;
       }
-    } catch { /* keep generic message */ }
-    throw new SourceError(`Comix responded ${res.status}: ${message}`, "comix", res.status === 404 ? 404 : 502);
+      try {
+        const res = await fetch(this.url, {
+          headers,
+          signal: AbortSignal.timeout(30_000),
+        });
+        const text = await res.text();
+        this.status = res.status;
+        this.responseText = text;
+        this.response = text;
+        this.responseURL = res.url;
+        this.respHeaders = {};
+        const lines: string[] = [];
+        res.headers.forEach((value, key) => {
+          this.respHeaders[key.toLowerCase()] = value;
+          lines.push(`${key}: ${value}`);
+        });
+        this.headerLines = lines.join("\r\n") + "\r\n";
+      } catch {
+        this.status = 0;
+        this.responseText = "";
+        this.response = "";
+      }
+      this.readyState = 4;
+      this.onreadystatechange?.();
+      this.onload?.();
+      this.onloadend?.();
+    })();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Bundle discovery + loading                                          */
+/* ------------------------------------------------------------------ */
+
+async function fetchText(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, Accept: "*/*", Referer: `${SITE}/` },
+    signal: AbortSignal.timeout(30_000),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  return res.text();
+}
+
+/** Relative module specifiers referenced by a chunk (`./x.js`). */
+function depSpecs(code: string): string[] {
+  const out = new Set<string>();
+  for (const m of code.matchAll(/(?:from|import)\s*["'](\.\/[^"']+)["']/g)) out.add(m[1]);
+  for (const m of code.matchAll(/import\s*\(\s*["'](\.\/[^"']+)["']\s*\)/g)) out.add(m[1]);
+  return [...out];
+}
+
+function dataUrl(code: string): string {
+  return `data:text/javascript;base64,${Buffer.from(code, "utf8").toString("base64")}`;
+}
+
+/** Replace `./name` specifiers with pre-computed data: URLs. */
+function rewriteSpecs(code: string, urls: Map<string, string>): string {
+  let out = code;
+  for (const [name, url] of urls) {
+    out = out.split(`"./${name}"`).join(`"${url}"`);
+    out = out.split(`'./${name}'`).join(`'${url}'`);
+  }
+  return out;
+}
+
+/**
+ * Locate the services by their method sets rather than export names —
+ * the export aliases (f, n, ...) are obfuscated and rotate per build.
+ * The title service uniquely has Cj+Pr+jr+Aq; the chapter service Aq+gO.
+ */
+function pickServices(mod: Record<string, unknown>): ComixEngine {
+  const objects = Object.values(mod).filter(
+    (v): v is Record<string, unknown> => !!v && typeof v === "object",
+  );
+  const title = objects.find((o) =>
+    ["Cj", "Pr", "jr", "Aq"].every((k) => typeof o[k] === "function"),
+  );
+  const chapter = objects.find((o) =>
+    ["Aq", "gO"].every((k) => typeof o[k] === "function"),
+  );
+  if (!title || !chapter) {
+    throw new Error("comix bundle layout changed (services not found)");
+  }
+  return {
+    f: title as unknown as ComixEngine["f"],
+    n: chapter as unknown as ComixEngine["n"],
+  };
+}
+
+interface EngineEntry {
+  engine: ComixEngine;
+  timers: Array<ReturnType<typeof setInterval>>;
+}
+
+/**
+ * `new Function` keeps the bundler from trying to analyze the dynamic
+ * import of a data: URL.
+ */
+const dynamicImport = new Function("u", "return import(u)") as (
+  u: string,
+) => Promise<Record<string, unknown>>;
+
+async function bootstrap(): Promise<EngineEntry> {
+  installDomStubs();
+
+  // 1) Homepage → main bundle → apicore chunk name.
+  const home = await fetchText(`${SITE}/`);
+  const mainSrc =
+    home.match(/<script[^>]+src=["']([^"']*main-[^"']+\.js)["']/)?.[1] ??
+    home.match(/<script[^>]+src=["']([^"']+\.js)["']/)?.[1];
+  if (!mainSrc) throw new Error("comix homepage carries no script bundle");
+  const mainUrl = new URL(mainSrc, SITE);
+  const main = await fetchText(mainUrl.href);
+  const apicoreName =
+    main.match(/apicore-[A-Za-z0-9_-]+\.js/)?.[0] ??
+    home.match(/apicore-[A-Za-z0-9_-]+\.js/)?.[0];
+  if (!apicoreName) throw new Error("could not locate comix apicore chunk");
+
+  // 2) Download the chunk and its dependency closure (usually just a shim).
+  const dist = new URL("./", mainUrl);
+  const files = new Map<string, string>();
+  const queue = [apicoreName];
+  while (queue.length) {
+    const name = queue.shift()!;
+    if (files.has(name)) continue;
+    const code = await fetchText(new URL(name, dist).href);
+    files.set(name, code);
+    for (const spec of depSpecs(code)) {
+      const dep = spec.replace(/^\.\//, "");
+      if (!files.has(dep)) queue.push(dep);
+    }
   }
 
-  let parsed: ComixResult<T>;
+  // 3) Rewrite relative imports to data: URLs (deepest first) and import.
+  const entries = [...files.entries()];
+  const urls = new Map<string, string>();
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const [name, code] = entries[i];
+    urls.set(name, dataUrl(rewriteSpecs(code, urls)));
+  }
+  const entryUrl = urls.get(apicoreName);
+  if (!entryUrl) throw new Error("apicore chunk missing after download");
+
+  // Capture their protection intervals so a rebuild can clear them.
+  const timers: Array<ReturnType<typeof setInterval>> = [];
+  const origSetInterval = globalThis.setInterval;
+  globalThis.setInterval = ((...args: Parameters<typeof globalThis.setInterval>) => {
+    const id = origSetInterval(...args);
+    timers.push(id);
+    return id;
+  }) as typeof globalThis.setInterval;
+  let mod: Record<string, unknown>;
   try {
-    const json = JSON.parse(bodyText) as ComixResult<T> & { e?: string };
-    parsed = typeof json.e === "string" ? (decryptPayload(json.e) as ComixResult<T>) : json;
+    mod = await dynamicImport(entryUrl);
+  } finally {
+    globalThis.setInterval = origSetInterval;
+  }
+
+  return { engine: pickServices(mod), timers };
+}
+
+const g = globalThis as Record<string, unknown>;
+let booting: Promise<EngineEntry> | undefined;
+
+async function getEngine(): Promise<EngineEntry> {
+  const cached = g.__comixEngine as EngineEntry | undefined;
+  if (cached) return cached;
+  if (!booting) {
+    booting = bootstrap().then(
+      (entry) => {
+        g.__comixEngine = entry;
+        booting = undefined;
+        return entry;
+      },
+      (err) => {
+        booting = undefined;
+        throw wrapError(err);
+      },
+    );
+  }
+  return booting;
+}
+
+async function disposeEngine(): Promise<void> {
+  const cached = g.__comixEngine as EngineEntry | undefined;
+  if (cached) {
+    for (const timer of cached.timers) clearInterval(timer);
+    g.__comixEngine = undefined;
+  }
+  booting = undefined;
+}
+
+function wrapError(err: unknown): SourceError {
+  if (err instanceof SourceError) return err;
+  const msg = err instanceof Error ? err.message : String(err);
+  const status = /fetch|unreachable|network|timeout|HTTP 5\d\d/i.test(msg) ? 503 : 502;
+  return new SourceError(`Comix failed: ${msg}`, "comix", status);
+}
+
+/** Run a service call; on a token rejection (key rotation) rebuild once. */
+async function engineCall<T>(fn: (engine: ComixEngine) => Promise<T>): Promise<T> {
+  const first = await getEngine();
+  try {
+    return await fn(first.engine);
   } catch (err) {
-    if (err instanceof SourceError) throw err;
-    throw new SourceError("Comix returned an unexpected payload", "comix");
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/status code 403/.test(msg)) throw wrapError(err);
+    await disposeEngine(); // bundle's key was retired — fetch the current one
+    const reborn = await getEngine();
+    try {
+      return await fn(reborn.engine);
+    } catch (retryErr) {
+      throw wrapError(retryErr);
+    }
   }
-  if (!parsed.result) {
-    throw new SourceError(`Comix API missing result: ${parsed.message ?? "unknown error"}`, "comix");
-  }
-  return parsed.result;
 }
 
-// --- API shapes (fields we use) -------------------------------------------
+/* ------------------------------------------------------------------ */
+/* Mappings                                                            */
+/* ------------------------------------------------------------------ */
 
-interface ComixPoster { medium?: string; large?: string }
-interface ComixManga {
-  hid: string;
-  title: string;
-  synopsis?: string;
-  type?: string;
-  status?: string;
-  year?: number;
-  poster?: ComixPoster;
-  latestChapter?: number;
-  genres?: { title: string }[];
-  authors?: { title: string }[];
-  artists?: { title: string }[];
-}
-interface ComixSearch { items: ComixManga[] }
-interface ComixChapter {
-  id: number;
-  number: number;
-  name?: string;
-  language?: string;
-}
-interface ComixChapters {
-  items: ComixChapter[];
-  meta?: { last_page?: number };
-  pagination?: { last_page?: number };
-}
-interface ComixChapterDetail {
-  pages?: { items?: { url: string }[] };
-}
-
-// --- mappings --------------------------------------------------------------
-
-function coverUrl(poster?: ComixPoster): string | undefined {
-  return poster?.large ?? poster?.medium;
+/** Their poster → absolute URL; prefer the 280px thumbnail. */
+function cover(poster?: MxPoster | null): string | undefined {
+  const path = poster?.gH ?? poster?.Qh;
+  return path ? new URL(path, SITE).href : undefined;
 }
 
 /** comix status strings -> our vocabulary. */
@@ -298,6 +533,10 @@ function mapKind(type?: string): SourceKind {
   return "manga";
 }
 
+/* ------------------------------------------------------------------ */
+/* Adapter                                                             */
+/* ------------------------------------------------------------------ */
+
 export const comix: SourceAdapter = {
   id: "comix",
   name: "Comix",
@@ -305,58 +544,65 @@ export const comix: SourceAdapter = {
   description: "Fast aggregator catalog — manhwa, manhua, manga & novels",
 
   async search(query, limit = 24): Promise<SourceSearchResult[]> {
-    const data = await apiGet<ComixSearch>("/manga", { keyword: query });
-    return (data.items ?? []).slice(0, limit).map((m) => ({
-      id: m.hid,
-      title: m.title,
-      coverImage: coverUrl(m.poster),
-      latestChapter: m.latestChapter ? `Ch. ${m.latestChapter}` : undefined,
+    const data = await engineCall((e) =>
+      e.f.Cj({ keyword: query, ...CLEAN_QUERY }),
+    );
+    return (data.q7 ?? []).slice(0, limit).map((m) => ({
+      id: m.pn ?? "",
+      title: m.D3 ?? "",
+      coverImage: cover(m.E2),
+      latestChapter: m.S_ ? `Ch. ${m.S_}` : undefined,
     }));
   },
 
   async getManga(id): Promise<SourceManga> {
-    const m = await apiGet<ComixManga>(`/manga/${encodeURIComponent(id)}`);
-    const authors = [...new Set((m.authors ?? []).map((a) => a.title).filter(Boolean))];
+    const m = await engineCall((e) => e.f.Aq(encodeURIComponent(id)));
+    const named = (rows?: MxNamed[]) =>
+      [...new Set((rows ?? []).map((r) => r.D3).filter((x): x is string => !!x))];
+    const authors = named(m.tr);
     // fall back to artists when no authors are listed
-    const credits = authors.length
-      ? authors
-      : [...new Set((m.artists ?? []).map((a) => a.title).filter(Boolean))];
+    const credits = authors.length ? authors : named(m.gY);
 
     return {
-      id: m.hid,
-      title: m.title,
-      description: m.synopsis ?? "",
-      coverImage: coverUrl(m.poster),
-      genres: (m.genres ?? []).map((g) => g.title).filter(Boolean),
-      status: mapStatus(m.status),
+      id: m.pn ?? id,
+      title: m.D3 ?? "",
+      description: m.LT ?? "",
+      coverImage: cover(m.E2),
+      genres: named(m.Fx),
+      status: mapStatus(m.sG),
       authors: credits,
-      year: m.year,
-      kind: mapKind(m.type),
+      year: m.Vu,
+      kind: mapKind(m.WX),
     };
   },
 
   async getChapters(mangaId): Promise<SourceChapter[]> {
     const hid = encodeURIComponent(mangaId);
-    const chapters: ComixChapter[] = [];
+    const chapters: MxChapter[] = [];
     const maxPages = 60;
 
     for (let page = 1; page <= maxPages; page++) {
-      const data = await apiGet<ComixChapters>(
-        `/manga/${hid}/chapters`,
-        { page, ...CLEAN_QUERY },
+      const data = await engineCall((e) =>
+        e.f.Pr(hid, { page, ...CLEAN_QUERY }),
       );
-      const items = data.items ?? [];
+      const items = data.q7 ?? [];
       chapters.push(...items);
 
-      const lastPage = data.meta?.last_page ?? data.pagination?.last_page;
+      const lastPage = data.Bi?.CE;
       if (lastPage ? page >= lastPage : items.length === 0) break;
     }
 
     // Multiple groups/languages can upload the same chapter; prefer English
     // when any exists, and one entry per chapter number (lowest id = earliest).
-    const english = chapters.filter((c) => (c.language ?? "en") === "en");
-    const pool = english.length ? english : chapters;
-    const best = new Map<number, ComixChapter>();
+    const mapped = chapters.map((c) => ({
+      id: c.xu ?? 0,
+      number: c.XK ?? 0,
+      name: c.od,
+      language: c.dg,
+    }));
+    const english = mapped.filter((c) => (c.language ?? "en") === "en");
+    const pool = english.length ? english : mapped;
+    const best = new Map<number, (typeof pool)[number]>();
     for (const c of pool) {
       const prev = best.get(c.number);
       if (!prev || c.id < prev.id) best.set(c.number, c);
@@ -372,15 +618,16 @@ export const comix: SourceAdapter = {
   },
 
   async getPages(chapterId): Promise<SourcePage[]> {
-    const detail = await apiGet<ComixChapterDetail>(
-      `/chapters/${encodeURIComponent(chapterId)}`,
-      CLEAN_QUERY,
+    const detail = await engineCall((e) =>
+      e.n.Aq(encodeURIComponent(chapterId)),
     );
-    const items = detail.pages?.items ?? [];
+    const items = (detail.tM ?? [])
+      .map((p) => ({ url: p.f6 }))
+      .filter((p): p is { url: string } => !!p.url);
     if (items.length === 0) {
       throw new SourceError(`Comix returned no pages for chapter ${chapterId}`, "comix");
     }
-    // items are in reading order; urls are absolute on comix's image mirrors.
-    return items.map((p) => ({ url: p.url }));
+    // urls are absolute on comix's image mirrors.
+    return items;
   },
 };
